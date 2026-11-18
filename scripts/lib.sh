@@ -1,0 +1,173 @@
+# Shared parts of the engine scripts. Source this file, and do not run it.
+
+engine=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+state=${XDG_CACHE_HOME:-$HOME/.cache}/minion-army
+mkdir -p "$state/claims"
+
+# A change to these paths can weaken the guards of the loop, so the owner reviews it in every project.
+ENGINE_OWNER_ONLY='^(\.minion/|\.github/|\.githooks/|\.claude/)'
+
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
+export GIT_CONFIG_KEY_1=credential.helper GIT_CONFIG_VALUE_1='!gh auth git-credential'
+
+# A slot is one place for an agent run. The loop starts the slots review-1, work-1 and so on, and a run
+# by hand gets a slot of its own. A slot runs one script at a time.
+AGENT_SLOT=${AGENT_SLOT:-manual-$$}
+
+# Reads the settings of this machine: the projects and the number of slots.
+load_machine_config() {
+  REPOS=()
+  WORKERS=2
+  REVIEWERS=2
+  local config=${MINION_CONFIG:-$HOME/.config/minion-army/config}
+  if [[ -f "$config" ]]; then
+    # shellcheck source=/dev/null
+    source "$config"
+  fi
+}
+
+# Sets up one project: its own clone at origin/dev, its folder for state, and its config.
+# The config and the hooks come from dev only, never from a pull request branch, because they run here.
+# Returns 1 when dev has no .minion/config.sh, so the project takes no part.
+load_project() { # owner/name
+  REPO=$1
+  OWNER=${REPO%%/*}
+  project=$state/projects/${REPO/\//__}
+  root=$project/clone
+  mkdir -p "$project"
+  if [[ ! -d "$root/.git" ]]; then
+    git_locked clone -q -b dev "${MINION_REMOTE_BASE:-https://github.com}/$REPO.git" "$root" || return 1
+  fi
+  git_locked -C "$root" fetch -q origin dev || { echo "The fetch of $REPO dev failed." >&2; return 1; }
+  # Nobody works in this clone, so it can always follow origin/dev.
+  git_locked -C "$root" reset -q --hard origin/dev || return 1
+  [[ -f "$root/.minion/config.sh" ]] || return 1
+
+  OWNER_ONLY_PATHS=
+  WORKER_TOOLS=()
+  REVIEWER_TOOLS=()
+  WORKER_EFFORT=medium
+  REVIEWER_EFFORT=high
+  WORKER_BUDGET_USD=10
+  REVIEWER_BUDGET_USD=10
+  MAX_REVIEW_ROUNDS=10
+  # shellcheck source=/dev/null
+  source "$root/.minion/config.sh"
+}
+
+# Runs a hook of the project from dev, if the project has it. A missing hook counts as a success.
+run_hook() { # name, working directory
+  local hook=$root/.minion/hooks/$1
+  [[ -x "$hook" ]] || return 0
+  (cd "$2" && MINION_REPO=$REPO "$hook")
+}
+
+# Sets agent_args: the skills of the engine, and the rules of the project for this kind of run.
+# The rules come from dev, so a pull request cannot change the rules of the agent that corrects it.
+set_agent_args() { # work, review or fix
+  agent_args=(--plugin-dir "$engine/plugin")
+  local rules=$root/.minion/$1.md
+  if [[ -f "$rules" ]]; then
+    agent_args+=(--append-system-prompt "$(cat "$rules")")
+  fi
+}
+
+take_lock() { # name
+  exec 9>"$state/$1.lock"
+  flock -n 9 || { echo "$1 is busy."; exit 0; }
+}
+take_slot() { take_lock "slot-$AGENT_SLOT"; }
+
+# Runs git while no other agent run changes the shared refs and worktrees of a clone.
+git_locked() { flock "$state/git.lock" git "$@"; }
+
+# Only one slot chooses work at a time. The lock holds from the choice until claim, or until the script ends.
+lock_choice() {
+  exec 7>"$state/choice.lock"
+  flock 7
+}
+
+# Notes the work of this slot, so that no other slot takes it. The note goes when the script ends.
+claim() { # "issue N" or "pr N"
+  echo "$REPO $1" >"$state/claims/$AGENT_SLOT"
+  trap release EXIT
+  flock -u 7
+}
+release() { rm -f "$state/claims/$AGENT_SLOT"; }
+is_claimed() { cat "$state"/claims/* 2>/dev/null | grep -qx "$REPO $1"; }
+
+# Removes the claim of a slot that stopped without its cleanup, for example after a kill.
+# The slot lock is free only when no run of that slot is active.
+release_stale_claims() {
+  local note slot repo kind number
+  for note in "$state"/claims/*; do
+    [[ -e "$note" ]] || continue
+    slot=${note##*/}
+    flock -n "$state/slot-$slot.lock" true || continue
+    read -r repo kind number <"$note"
+    if [[ "$kind" == issue ]]; then
+      gh issue edit "$number" --repo "$repo" --remove-label in-progress >/dev/null || continue
+    fi
+    rm -f "$note"
+    echo "Slot $slot stopped during $repo $kind $number. Its claim is gone."
+  done
+}
+
+# Creates a worktree of a ref, and lets the project add the files that git ignores and its checks need.
+prepare_worktree() { # directory, git ref
+  remove_worktree "$1"
+  git_locked -C "$root" worktree add -q --detach "$1" "$2"
+  if ! run_hook setup-worktree "$1"; then
+    echo "The hook setup-worktree of $REPO failed." >&2
+    exit 1
+  fi
+}
+
+remove_worktree() { # directory
+  git_locked -C "$root" worktree remove --force "$1" 2>/dev/null || true
+}
+
+# Prints the number of blockers of an issue that are not done. A blocker is done when it is closed or
+# has the label on-dev, because GitHub closes an issue only when its change reaches the release branch.
+unfinished_blockers() { # issue
+  gh api "repos/$REPO/issues/$1/dependencies/blocked_by?per_page=100" --jq \
+    '[.[] | select(.state == "open" and ((.labels | map(.name) | index("on-dev")) | not))] | length'
+}
+
+# Prints the oldest issue with the label that has no unfinished blocker.
+# A failed lookup prints no count, so the issue counts as blocked until the next round.
+next_unblocked_issue() { # label
+  local candidate
+  for candidate in $(gh issue list --repo "$REPO" --state open --label "$1" --author "$OWNER" --limit 100 \
+    --search "-label:in-progress -label:needs-input" --json number --jq 'sort_by(.number) | .[].number'); do
+    is_claimed "issue $candidate" && continue
+    if [[ "$(unfinished_blockers "$candidate")" == 0 ]]; then
+      echo "$candidate"
+      return
+    fi
+  done
+}
+
+set_pr_label() { # pull request, label to add, the rest are labels to remove
+  local pull_request=$1 add=$2 label
+  shift 2
+  for label in "$@"; do
+    gh pr edit "$pull_request" --repo "$REPO" --remove-label "$label" >/dev/null
+  done
+  gh pr edit "$pull_request" --repo "$REPO" --add-label "$add" >/dev/null
+}
+
+# Runs the hook deploy-dev once for each new commit on origin/dev. Call it after load_project.
+# The commit is noted even when the deploy fails, so a broken deploy does not run every minute.
+# Two slots can merge at the same time, so only one of them deploys. The other one skips it.
+deploy_dev() {
+  (
+    flock -n 6 || exit 0
+    target=$(git -C "$root" rev-parse origin/dev)
+    if [[ "$(cat "$project/dev-deployed" 2>/dev/null)" != "$target" ]]; then
+      echo "$target" >"$project/dev-deployed"
+      run_hook deploy-dev "$root" || echo "The dev deploy of $REPO failed." >&2
+    fi
+  ) 6>"$project/dev.lock"
+}

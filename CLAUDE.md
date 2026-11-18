@@ -9,15 +9,31 @@ its guards: the agents never merge, and a pull request can never change the loop
 
 ## Stack
 
-- Bash, with `flock` for all locking
-- `gh` for every call to GitHub, and `jq` to read the project config
-- The `claude` CLI in print mode (`claude -p`) for each agent run
+- Bash, with `flock` for all locking. No `jq`: `gh --jq` reads GitHub, and the project config is Bash
+- `gh` for every call to GitHub
+- The `claude` CLI in print mode (`claude -p`) for each agent run, with `plugin/` as `--plugin-dir`
 - A systemd user timer and `systemd-run` for the slots. Docker comes in a later phase
 
 ## Commands
 
-No command exists yet. Phase 1 of the plan adds the test script of the loop, which needs no network
-and never starts Claude. Add it here when it exists.
+| Task | Command |
+|---|---|
+| Test the loop (no network, no Claude) | `tests/loop-test.sh` |
+| One round by hand | `scripts/agent-loop.sh` |
+| One script for one project | `MINION_REPO=owner/name scripts/work-next-issue.sh [issue]` |
+| Install the timer | `scripts/install-agent-timer.sh` |
+
+The machine config is `~/.config/minion-army/config` (template: `config.example`). A project opts in
+with `.minion/config.sh` on its `dev` branch (template: `project.example/config.sh`).
+
+## Map
+
+| What | Where |
+|---|---|
+| Clone, config and hooks of a project | `load_project` and `run_hook` in `scripts/lib.sh` |
+| Claims and locks between slots | `scripts/lib.sh` |
+| The merge and its guards | `scripts/review-next-pr.sh` |
+| The skills the agents run | `plugin/skills/` |
 
 ## Conventions
 

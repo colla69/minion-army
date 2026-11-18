@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Gives the oldest waiting issue of one project to Claude, in its own worktree, up to a pull request into dev.
+# An issue waits until each issue that blocks it is on dev or closed. A number given by hand skips this check.
+# With no waiting issue, it stops before any call to Claude, so a run costs nothing.
+# Usage: MINION_REPO=owner/name scripts/work-next-issue.sh [issue number]
+{ # Bash reads this block in full before it runs it, so a change to this file during a run cannot break the run.
+set -euo pipefail
+
+LABEL=agent-ready
+
+source "$(dirname "$0")/lib.sh"
+take_slot
+if ! load_project "${MINION_REPO:?Set MINION_REPO to owner/name.}"; then
+  echo "$MINION_REPO takes no part."
+  exit 0
+fi
+
+lock_choice
+issue=${1:-$(next_unblocked_issue "$LABEL")}
+if [[ -z "$issue" ]]; then
+  echo "$REPO: no issue waits."
+  exit 0
+fi
+if is_claimed "issue $issue"; then
+  echo "$REPO: another slot works on issue $issue."
+  exit 0
+fi
+claim "issue $issue"
+
+# The label is the guard: on a public repository, only the owner can set it.
+labelled=$(gh issue view "$issue" --repo "$REPO" --json labels,author \
+  --jq "(.author.login == \"$OWNER\") and (.labels | map(.name) | index(\"$LABEL\") != null)")
+if [[ "$labelled" != "true" ]]; then
+  echo "$REPO: issue $issue is not from $OWNER with the label $LABEL." >&2
+  exit 1
+fi
+
+branch=issue-$issue
+worktree=$project/$branch
+prepare_worktree "$worktree" origin/dev
+git_locked -C "$worktree" switch -q -C "$branch"
+
+gh issue edit "$issue" --repo "$REPO" --add-label in-progress >/dev/null
+
+# Only the listed tools run, so the worker cannot merge. The project adds its own commands, such as its
+# build and its tests, in WORKER_TOOLS.
+set_agent_args work
+status=0
+(
+  cd "$worktree"
+  claude -p "/minion:work-issue $issue" "${agent_args[@]}" \
+    --effort "$WORKER_EFFORT" \
+    --max-budget-usd "$WORKER_BUDGET_USD" \
+    --permission-mode acceptEdits \
+    --allowedTools "Read" "Edit" "Write" "Glob" "Grep" "Agent" "Skill" \
+    "Bash(git status:*)" "Bash(git diff:*)" "Bash(git log:*)" "Bash(git show:*)" \
+    "Bash(git add:*)" "Bash(git rm:*)" "Bash(git mv:*)" "Bash(git commit:*)" \
+    "Bash(git push:*)" \
+    "Bash(gh issue view:*)" "Bash(gh issue comment:*)" "Bash(gh pr create:*)" "Bash(gh pr view:*)" \
+    "${WORKER_TOOLS[@]}" \
+    --disallowedTools "Bash(*--no-verify*)" "Bash(git push*--force*)" "Bash(git push*-f*)" "Bash(git push*+*)"
+) || status=$?
+
+gh issue edit "$issue" --repo "$REPO" --remove-label in-progress --remove-label "$LABEL" >/dev/null
+# The worker can name its branch issue-N-something, for example when an old branch issue-N exists.
+pull_request=
+while IFS=$'\t' read -r head url; do
+  if [[ "$head" == "$branch" || "$head" == "$branch"-* ]]; then
+    pull_request=$url
+    break
+  fi
+done < <(gh pr list --repo "$REPO" --state open --base dev --author "$OWNER" --limit 100 \
+  --json headRefName,url --jq '.[] | [.headRefName, .url] | @tsv')
+if [[ -n "$pull_request" ]]; then
+  gh pr edit "$pull_request" --repo "$REPO" --add-label needs-review >/dev/null
+  echo "$REPO: issue $issue: $pull_request"
+  remove_worktree "$worktree"
+else
+  gh issue edit "$issue" --repo "$REPO" --add-label needs-input >/dev/null
+  gh issue comment "$issue" --repo "$REPO" \
+    --body "**Worker:** I stopped without a pull request (exit code $status). Answer in a comment or in the issue body. Then remove \`needs-input\` and add \`$LABEL\`." >/dev/null
+  echo "$REPO: issue $issue: no pull request. The worktree stays at $worktree." >&2
+  exit 1
+fi
+exit
+}
