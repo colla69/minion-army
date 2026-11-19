@@ -131,5 +131,7 @@ and every optional file:
 - `hooks/setup-worktree`, `hooks/pre-review`, `hooks/deploy-dev`: scripts that prepare a worktree,
   check a pull request before the review, and deploy `dev`.
 
+To let Claude do these steps in the project, paste the prompt in `docs/dock-project.md`.
+
 The project also needs a `dev` branch with a rule that requires CI, and CI that runs on pull
 requests. The review waits for the required checks, so without such a rule it waits forever.
