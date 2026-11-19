@@ -445,6 +445,68 @@ notified() { grep -qF -- "$1" "$case_dir/curl.log" 2>/dev/null; }
 not_notified() { ! notified "$1"; }
 telegram() { TELEGRAM_BOT_TOKEN=made-up-token TELEGRAM_CHAT_ID=42 run "$@"; }
 
+# The fix agent takes requested changes, and each comment of the owner that has no answer yet, also
+# on a pull request that waits for the owner. The fake keeps the head commit and the count of
+# answers in files, so the fake claude can push a commit or answer.
+fix_rules() { # labels, whether an owner comment waits
+  git -C "$seed" push -q origin dev:issue-116
+  echo "$sha" >"$case_dir/head"
+  echo 0 >"$case_dir/answers"
+  cat >"$case_dir/rules.sh" <<EOF
+respond() {
+  case "\$*" in
+    "pr list"*) echo 116 ;;
+    "pr view 116 --repo $REPO --json headRefName"*) echo issue-116 ;;
+    "pr view 116 --repo $REPO --json headRefOid"*) cat "\$FAKE/head" ;;
+    "pr view 116 --repo $REPO --json body"*) echo "made-up body" ;;
+    "pr view 116 --repo $REPO --json labels"*) echo "$1" ;;
+    "pr view 116 --repo $REPO --json comments"*owner_comment_waits*) echo $2 ;;
+    "pr view 116 --repo $REPO --json comments"*) cat "\$FAKE/answers" ;;
+  esac
+}
+EOF
+}
+fix_pushes() { echo 'echo 0000000000000000000000000000000000000001 >"$FAKE/head"' >>"$case_dir/claude-action.sh"; }
+fix_answers() { echo 'echo 1 >"$FAKE/answers"' >>"$case_dir/claude-action.sh"; }
+
+new_case fix-findings
+fix_rules changes-requested false
+fix_pushes
+run fix-next-pr.sh
+check "a correction goes back to the review" logged "--add-label needs-review"
+check "a correction removes changes-requested" logged "--remove-label changes-requested"
+check "a correction posts no answer of the script" not_logged "**Fixer:** I pushed"
+
+new_case fix-owner-question
+fix_rules needs-owner true
+fix_answers
+telegram fix-next-pr.sh
+check "a comment of the owner on a pull request for the owner starts the fix agent" claude_ran "/minion:fix-pr 116"
+check "the fix agent may answer on the pull request" claude_ran "Bash(gh pr comment 116:*)"
+check "an answer alone keeps needs-owner" not_logged "--remove-label needs-owner"
+check "an answer alone does not go back to the review" not_logged "--add-label needs-review"
+check "an answer notifies the owner" notified "text=$REPO pull request 116: the fix agent answered your comment"
+
+new_case fix-owner-change
+fix_rules needs-owner true
+fix_pushes
+run fix-next-pr.sh
+check "a change for the owner goes back to the review" logged "--add-label needs-review"
+check "a change for the owner removes needs-owner" logged "--remove-label needs-owner"
+check "a change without an answer gets one from the script" logged "**Fixer:** I pushed"
+
+new_case fix-owner-nothing
+fix_rules needs-owner true
+telegram fix-next-pr.sh
+check "a run with no answer and no change tells the owner" logged "The worker stopped"
+check "a run with no answer and no change notifies the owner" notified "needs you"
+
+new_case review-skips-owner-comment
+review_rules "$sha"
+approve
+run review-next-pr.sh
+check "the review leaves a pull request with an unanswered owner comment" logged "owner_comment_waits | not"
+
 new_case notify-needs-input
 work_rules 105
 echo "exit 1" >"$case_dir/claude-action.sh"

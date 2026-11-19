@@ -255,6 +255,13 @@ Done when: an agent run cannot read or write outside its worktree.
 waits for the owner. With `NOTIFY=all`, it also sends the progress. The token and the chat stay in
 `agent.env`, and the token goes to curl in a config file, never on a command line.
 
+### Owner comments get answers — done on 2026-11-19
+
+Only the merge waits for the owner. The fix agent takes each comment of the owner that has no
+answer yet, on any open pull request, also one with `needs-owner`. It answers with a comment that
+starts with `**Fixer:**`. A change goes back to the review, and the review skips a pull request whose
+owner comment waits, so a merge cannot pass over it.
+
 ## 5. Open questions
 
 1. **Closing pull requests.** Today nothing closes a pull request without a merge. Not decided yet.

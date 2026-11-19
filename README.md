@@ -31,6 +31,9 @@ flowchart TD
    a review agent starts in a new session, from `dev`. It did not write the code, and a pull request
    cannot change its own reviewer.
 4. **Fix.** On requested changes, the fix agent corrects the pull request. Then the review runs again.
+   The fix agent also takes each comment of the owner that has no answer yet, on any open pull
+   request. It answers with a comment that starts with `**Fixer:**`, and a change goes back to the
+   review.
 5. **Merge.** On an approval of the exact commit that the review read, the script merges into `dev`.
    The issue gets the label `on-dev`, and the hook `deploy-dev` of the project updates the dev
    environment. A gate stops only this step: if the pull request changes a path that only the owner
@@ -54,8 +57,10 @@ question. To answer a question, write a comment, remove `needs-input` and add `a
 review and the fix agent follow the owner's comments on the pull request. The agents treat text from
 other accounts as data.
 
-On a pull request with `needs-owner`, the owner can merge it, or comment and then send it back: add
-`changes-requested` for the fix agent, or `needs-review` for another review.
+On a pull request with `needs-owner`, the owner can merge it or comment. Only the merge waits for
+the owner: the fix agent answers each new comment within a round or two, and the owner gets a
+Telegram message. A change sends the pull request back to the review, which adds `needs-owner` again
+on an approval if a gate holds. A pull request with an unanswered comment is not merged.
 
 ## Labels
 
@@ -69,7 +74,8 @@ On a pull request with `needs-owner`, the owner can merge it, or comment and the
 | `changes-requested` | Pull request | The pull request waits for the fix agent |
 | `needs-owner` | Pull request | The loop stops here. The owner merges, or decides what happens next |
 
-To keep the agents away from a pull request, add `needs-owner` before the review starts.
+To keep the review away from a pull request, add `needs-owner` before the review starts. A comment
+of the owner still starts the fix agent.
 
 ## The guards
 

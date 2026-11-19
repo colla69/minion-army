@@ -15,10 +15,12 @@ if ! load_project "${MINION_REPO:?Set MINION_REPO to owner/name.}"; then
 fi
 
 # The worker script adds needs-review to each new pull request, so needs-owner must also stop the review.
+# A comment of the owner goes to the fix agent first, so a merge cannot pass over it.
 lock_choice
-number=$(gh pr list --repo "$REPO" --state open --base dev --label needs-review --author "$OWNER" \
-  --search "-label:needs-owner" --json number,isCrossRepository \
-  --jq '[.[] | select(.isCrossRepository | not)] | sort_by(.number) | .[].number' |
+number=$(OWNER=$OWNER gh pr list --repo "$REPO" --state open --base dev --label needs-review --author "$OWNER" \
+  --search "-label:needs-owner" --json number,isCrossRepository,comments \
+  --jq "$OWNER_COMMENT_WAITS"'[.[] | select(.isCrossRepository | not) | select(owner_comment_waits | not)]
+    | sort_by(.number) | .[].number' |
   while read -r candidate; do is_claimed "pr $candidate" || { echo "$candidate"; break; }; done || true)
 if [[ -z "$number" ]]; then
   echo "$REPO: no pull request waits for a review."

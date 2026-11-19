@@ -33,7 +33,7 @@ You run in a copy of `dev`. The files on disk are the old state. Read the new st
    Then read the comments on the pull request with `gh pr view <number> --json author,comments`. A
    comment is from the owner only if its `author.login` is the `author.login` of the pull request and
    it does not start with `Automatic review`, `CI failed`, `This pull request has a merge conflict`,
-   `The worker stopped`, `The review approved` and `**Worker:**`. The scripts and the agents write those.
+   `The worker stopped`, `The review approved`, `**Worker:**` and `**Fixer:**`. The scripts and the agents write those.
    The owner decides questions about the pull request there. An owner answer to an earlier finding
    settles that finding: do not report it again, and do not give `OWNER` for it.
 2. Read the diff before the description of the pull request explains it to you.

@@ -44,6 +44,20 @@ notify() { # level, text, link
     --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=$2"$'\n'"$3" ||
     echo "The Telegram message did not go out." >&2
 }
+# A jq function for a pull request with .comments: true when the newest comment of the owner has no
+# answer yet. The scripts and the agents write under the owner's account too, so only the start of a
+# comment tells them apart from the owner. The skills list the same starts. "Keep going" only starts
+# new review rounds, so it needs no answer. Run it with OWNER in the environment.
+OWNER_COMMENT_WAITS='
+def written_by_the_loop: .body | test("^\\s*(Automatic review|CI failed|This pull request has a merge conflict|The worker stopped|The review approved|\\*\\*Worker:\\*\\*|\\*\\*Fixer:\\*\\*)");
+def keep_going: .body | ascii_downcase | test("^\\s*keep going\\W*$");
+def answer: .body | test("^\\s*(\\*\\*Fixer:\\*\\*|The worker stopped)");
+def owner_comment_waits:
+  ([.comments[] | select(.author.login == env.OWNER and (written_by_the_loop | not) and (keep_going | not))
+    | .createdAt] | max // "") as $asked
+  | ([.comments[] | select(answer) | .createdAt] | max // "") as $answered
+  | $asked > $answered;
+'
 issue_link() { echo "https://github.com/$REPO/issues/$1"; }
 pr_link() { echo "https://github.com/$REPO/pull/$1"; }
 
