@@ -221,7 +221,7 @@ To go back: revert the merge of #171, stop `minion-army-agent.timer` and start
 Done when: a second project takes part after the owner merges a config file, with no change on the
 machine.
 
-### Phase 4: promotion and deploy — engine done, makeMyTaxes open
+### Phase 4: promotion and deploy — done, first release open
 
 1. Done: `scripts/promote.sh owner/name` replaces the `promote` skill. Every step follows fixed
    rules, so a script does it without Claude, and the loop test covers it. The hooks `version-get`,
@@ -229,7 +229,8 @@ machine.
 2. Dropped: `minion deploy-live`. The live deploy of makeMyTaxes must run in the checkout that holds
    the live data, not in the engine's clone. Each project keeps its own live deploy, and the owner
    starts it.
-3. In review: makeMyTaxes #178 adds the three hooks and removes its `promote` skill.
+3. Done: makeMyTaxes #178 added the three hooks and removed its `promote` skill. Open: the first
+   real release with `promote.sh`.
 4. Done, found on the way: Claude Code loads project plugins only in the folder where they were
    installed. The engine now passes the plugins that a project enables on `dev` with
    `--plugin-dir`, so the agents in its worktrees get the project's standards and the
