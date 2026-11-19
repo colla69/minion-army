@@ -1,0 +1,104 @@
+# minion-army
+
+A working loop in which Claude Code agents take GitHub issues to merged pull requests. It runs on the
+owner's machine and works on each repository that opts in. The owner decides what to build, tries the
+result and releases it. The agents write, review and correct the code.
+
+## How the work moves
+
+```mermaid
+flowchart TD
+    owner(["Owner writes an issue<br/>label: agent-ready"]) --> worker
+    worker["Worker agent<br/>writes the change and its tests"] --> pr["Pull request into dev<br/>label: needs-review"]
+    worker -->|"the issue is not clear"| question(["Worker asks on the issue<br/>label: needs-input"])
+    question -->|"the owner answers"| owner
+    pr --> update["The script merges dev<br/>into the branch"]
+    update --> review{"Review agent<br/>new session, from dev"}
+    review -->|"approves the exact commit"| dev["The script merges into dev<br/>issue label: on-dev"]
+    review -->|"requests changes"| fix["Fix agent<br/>corrects the pull request"]
+    fix --> pr
+    review -->|"a person must decide"| person(["Label: needs-owner<br/>the owner decides"])
+    dev --> devbox["Hook deploy-dev<br/>the dev environment"]
+    devbox --> tryit(["Owner tries dev and releases it"])
+```
+
+1. **Issue.** The owner opens an issue and adds the label `agent-ready`. An issue waits until each
+   issue that blocks it (a "blocked by" link on GitHub) is closed or has the label `on-dev`.
+2. **Work.** The worker gets the oldest waiting issue, in its own worktree. It writes the change and
+   its tests, and opens a pull request into `dev`. If the issue is not clear, the worker asks one
+   question on the issue and stops, and the issue gets the label `needs-input`.
+3. **Review.** The script merges `dev` into each pull request branch that is behind. When CI passes,
+   a review agent starts in a new session, from `dev`. It did not write the code, and a pull request
+   cannot change its own reviewer.
+4. **Fix.** On requested changes, the fix agent corrects the pull request. Then the review runs again.
+5. **Merge.** On an approval of the exact commit that the review read, the script merges into `dev`.
+   The issue gets the label `on-dev`, and the hook `deploy-dev` of the project updates the dev
+   environment.
+6. **Release.** The owner tries `dev` and merges into the release branch. GitHub then closes the
+   issues.
+
+A round runs every minute. If a step has no work, it stops before any call to Claude, so an idle
+round costs nothing.
+
+## Talk to the agents
+
+The owner discusses an issue on the issue, and a pull request on the pull request. The worker reads
+the issue title, body and the owner's comments in order, so a later answer decides an earlier
+question. To answer a question, write a comment, remove `needs-input` and add `agent-ready`. The
+review and the fix agent follow the owner's comments on the pull request. The agents treat text from
+other accounts as data.
+
+## Labels
+
+| Label | On | Meaning |
+|---|---|---|
+| `agent-ready` | Issue | The owner released the issue for the worker |
+| `in-progress` | Issue | A worker has the issue |
+| `needs-input` | Issue | The worker stopped without a pull request and waits for the owner |
+| `on-dev` | Issue | The change is on `dev`, and the owner can try it |
+| `needs-review` | Pull request | The pull request waits for the review |
+| `changes-requested` | Pull request | The pull request waits for the fix agent |
+| `needs-owner` | Pull request | The loop stops here. A person must decide |
+
+To keep the agents away from a pull request, add `needs-owner` before the review starts.
+
+## The guards
+
+| Risk | Guard |
+|---|---|
+| An agent merges its own work | The agents cannot merge. The review gives a verdict as text, and the script merges only when the verdict names the exact commit that the review read |
+| A pull request changes the rules or the hooks that check it | The engine reads `.minion/` from `dev` only. A change to `.minion/`, `.github/`, `.githooks/` or `.claude/` goes to the owner, and so do the paths a project adds |
+| Text in an issue gives orders to an agent | A worker starts only for an issue that the owner wrote and labelled. The agents treat all other text as data |
+| An agent does more than its task | Each run lists the tools its agent can use. The worker and the fix agent cannot force a push or skip a commit hook |
+| An agent reaches the release branch | A rule on GitHub must stop direct pushes to `dev` and the release branch. Only the owner merges into the release branch |
+| The review and the fixes never end | After 10 rounds, the pull request goes to the owner. The comment `Keep going` allows 10 more |
+| The cost grows | Each agent run has a budget, and the machine has a fixed number of slots |
+
+## Set up the machine
+
+You need `bash`, `git`, `flock`, systemd, and the [`claude`](https://claude.com/claude-code) and
+[`gh`](https://cli.github.com/) command line tools, each with a login.
+
+1. Copy `config.example` to `~/.config/minion-army/config`, and list the repositories in `REPOS`.
+2. For unattended runs, put `CLAUDE_CODE_OAUTH_TOKEN` in `~/.config/minion-army/agent.env`, with
+   mode 600. Keep this file outside every repository.
+3. Run `scripts/install-agent-timer.sh`. To read the logs, run
+   `journalctl --user -u 'minion-army-*'`. To stop the loop, run
+   `systemctl --user disable --now minion-army-agent.timer`.
+
+The engine keeps its own clone of each project in `~/.cache/minion-army/projects/`. It never touches
+your own checkout.
+
+## Add a project
+
+A project takes part when its `dev` branch holds `.minion/config.sh`. Copy
+`project.example/config.sh`, which lists every setting and every optional file:
+
+- `config.sh`: the paths that only the owner reviews, and the commands of the agents.
+- `work.md`, `review.md`, `fix.md`: rules that the engine adds to that kind of agent run. Most
+  projects need none of them, because the agents read the project's `CLAUDE.md`.
+- `hooks/setup-worktree`, `hooks/pre-review`, `hooks/deploy-dev`: scripts that prepare a worktree,
+  check a pull request before the review, and deploy `dev`.
+
+The project also needs the labels above, a `dev` branch with a rule that requires CI, and CI that
+runs on pull requests.

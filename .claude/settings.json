@@ -1,6 +1,7 @@
 {
   "env": {
-    "STEWARD_CHECK": "tests/loop-test.sh"
+    "STEWARD_CHECK": "tests/loop-test.sh",
+    "STEWARD_CHECK_PATHS": "scripts/**,tests/**"
   },
   "model": "opus",
   "enabledPlugins": {

@@ -1,6 +1,6 @@
 # minion-army: plan
 
-Status: draft, 2026-11-18. No code exists yet.
+Status: phase 1 done, 2026-11-18.
 
 ## 1. Goal
 
@@ -174,7 +174,7 @@ Each phase ends with something that works. The old loop in `makeMyTaxes` stays u
 
 The standards are installed, and `CLAUDE.md` exists.
 
-### Phase 1: the engine, for one project — code done, live test open
+### Phase 1: the engine, for one project — done
 
 1. Done: `tests/loop-test.sh`, ported with its fake `gh` and fake `claude`. It is the check command
    of this repository.
@@ -185,7 +185,7 @@ The standards are installed, and `CLAUDE.md` exists.
    parts.
 5. Done: `--plugin-dir` works in print mode.
 6. Done: the repository list comes from the machine config. Discovery comes in phase 3.
-7. Open: run one round against a test repository on GitHub.
+7. Done: on 2026-11-18, issue 1 of `colla69/minion-army-sandbox` went to a merged pull request.
 
 The `minion` entry point of section 3.9 is not built yet. The scripts keep their old names in
 `scripts/`, so the port stays easy to compare with `makeMyTaxes`.
@@ -193,20 +193,20 @@ The `minion` entry point of section 3.9 is not built yet. The scripts keep their
 Done when: the tests pass, and a round against a test repository takes one issue to a merged pull
 request.
 
-### Phase 2: `makeMyTaxes` moves to the engine
+### Phase 2: `makeMyTaxes` moves to the engine — switched, first issue open
 
-1. In `makeMyTaxes`, on a branch: add `.minion/config.sh`, the hooks and the extra rules. The owner
-   merges this pull request, because `.minion/` is an owner-only path. The hook `setup-worktree`
-   must take the private terms of the privacy scan from a folder on the machine, because the
-   engine's clone does not hold the git-ignored `.privacy/` of the owner's checkout.
-2. Stop the old timer, and start the new one. The two loops must never run at the same time, because
-   both would take the same issues.
-3. Run a few issues through the new loop.
-4. In a second pull request, remove the old loop scripts and skills from `makeMyTaxes`, and shorten
-   `docs/agentic-workflow.md` to what is specific to the project.
+1. Done: makeMyTaxes #171 added `.minion/config.sh` and four hooks, and removed the old loop in the
+   same pull request. The only rule of the old skills that `CLAUDE.md` did not hold yet, the
+   `tax-law-checker` step, moved into `CLAUDE.md`, so makeMyTaxes needs no rules files. The hook
+   `setup-worktree` takes the private terms of the privacy scan from
+   `~/.config/makemytaxes/privacy/`.
+2. Done on 2026-11-18: the old timer is off, and `minion-army-agent.timer` runs both projects. The dev
+   container runs from the engine's clone, with the test data copied over. The owner checked a
+   deploy.
+3. Open: run a few issues of makeMyTaxes through the new loop.
 
-Done when: `makeMyTaxes` works as before, with no loop code of its own. To go back before step 4,
-stop the new timer and start the old one.
+To go back: revert the merge of #171, stop `minion-army-agent.timer` and start
+`makemytaxes-agent.timer`.
 
 ### Phase 3: many projects
 
