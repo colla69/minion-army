@@ -57,11 +57,13 @@ if [[ "$now" != "$head" || "$now_body" != "$body" ]]; then
   set_pr_label "$number" needs-review changes-requested
   remove_worktree "$worktree"
   echo "$REPO: pull request $number: corrected, and back in the review queue."
+  notify all "$REPO pull request $number: the fix agent pushed corrections." "$(pr_link "$number")"
 else
   set_pr_label "$number" needs-owner changes-requested
   gh pr comment "$number" --repo "$REPO" \
     --body "The worker stopped without a correction (exit code $status)." >/dev/null
   echo "$REPO: pull request $number: no correction. The worktree stays at $worktree." >&2
+  notify owner "$REPO pull request $number needs you: the fix agent stopped without a correction." "$(pr_link "$number")"
   exit 1
 fi
 exit

@@ -40,6 +40,7 @@ with `.minion/config.sh` on its `dev` branch (template: `project.example/config.
 | Claims and locks between slots | `scripts/lib.sh` |
 | The merge and its guards | `scripts/review-next-pr.sh` |
 | The skills the agents run | `plugin/skills/` |
+| Telegram messages to the owner | `notify` in `scripts/lib.sh` |
 
 ## Conventions
 
@@ -48,6 +49,8 @@ with `.minion/config.sh` on its `dev` branch (template: `project.example/config.
 - A step that finds no work must stop before any call to Claude, so an idle round costs nothing.
 - Each script that starts an agent lists the tools the agent can use. Never start an agent with all
   tools.
+- Each place where the loop stops and waits for the owner calls `notify owner`. A new stop needs one
+  too, or the owner never learns about it.
 
 ## Boundaries
 

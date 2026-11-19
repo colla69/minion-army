@@ -96,6 +96,13 @@ You need `bash`, `git`, `flock`, `python3`, systemd, and the [`claude`](https://
    `journalctl --user -u 'minion-army-*'`. To stop the loop, run
    `systemctl --user disable --now minion-army-agent.timer`.
 
+4. Optional: to get Telegram messages, create a bot with `@BotFather`, send it one message, and put
+   `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `agent.env`. Each time the loop stops and waits for
+   you, the bot sends the project, the issue or pull request with its link, and the reason: a
+   question of the worker, an approval that only you merge, 10 rounds without an approval, a
+   decision for a person, a fix agent or a hook that failed. With `NOTIFY=all` in the machine
+   config, it also sends the progress. A message never holds code, a diff or the text of an issue.
+
 The engine keeps its own clone of each project in `~/.cache/minion-army/projects/`. It never touches
 your own checkout. Claude Code loads a project's plugins only in the folder where you installed them,
 so the engine hands each plugin that the project enables on `dev` to its agents. Install the

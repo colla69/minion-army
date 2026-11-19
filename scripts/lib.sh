@@ -21,13 +21,31 @@ load_machine_config() {
   WORKERS=2
   REVIEWERS=2
   ACCOUNT=
+  NOTIFY=${NOTIFY:-owner}
   local config=${MINION_CONFIG:-$HOME/.config/minion-army/config}
   if [[ -f "$config" ]]; then
     # shellcheck source=/dev/null
     source "$config"
   fi
+  # The slots and the scripts that they start send their messages at this level.
+  export NOTIFY
   discover_repos
 }
+
+# Sends a message to the owner on Telegram. Level "owner" is for each stop that waits for the owner,
+# and always goes out. Level "all" is for progress, and goes out only with NOTIFY=all. Without
+# TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID, from agent.env, nothing is sent. A failed send never stops
+# the loop. The token goes in a config file for curl, so it never shows in the list of processes.
+notify() { # level, text, link
+  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || return 0
+  [[ "$1" == owner || "${NOTIFY:-owner}" == all ]] || return 0
+  curl -fsS --max-time 10 -o /dev/null \
+    -K <(printf 'url = "%s/bot%s/sendMessage"\n' "${TELEGRAM_API:-https://api.telegram.org}" "$TELEGRAM_BOT_TOKEN") \
+    --data-urlencode "chat_id=$TELEGRAM_CHAT_ID" --data-urlencode "text=$2"$'\n'"$3" ||
+    echo "The Telegram message did not go out." >&2
+}
+issue_link() { echo "https://github.com/$REPO/issues/$1"; }
+pr_link() { echo "https://github.com/$REPO/pull/$1"; }
 
 # Adds to REPOS each source repository of ACCOUNT that has .minion/config.sh on dev, so that a project
 # takes part once the owner merges its config. The list stays in a cache for an hour, so a round makes
@@ -148,6 +166,8 @@ prepare_worktree() { # directory, git ref
   git_locked -C "$root" worktree add -q --detach "$1" "$2"
   if ! run_hook setup-worktree "$1"; then
     echo "The hook setup-worktree of $REPO failed." >&2
+    notify owner "$REPO needs you: the hook setup-worktree failed, so no agent can start." \
+      "Read the log: journalctl --user -u 'minion-army-*'"
     exit 1
   fi
 }
@@ -195,7 +215,13 @@ deploy_dev() {
     target=$(git -C "$root" rev-parse origin/dev)
     if [[ "$(cat "$project/dev-deployed" 2>/dev/null)" != "$target" ]]; then
       echo "$target" >"$project/dev-deployed"
-      run_hook deploy-dev "$root" || echo "The dev deploy of $REPO failed." >&2
+      if run_hook deploy-dev "$root"; then
+        has_hook deploy-dev && notify all "$REPO: dev ${target:0:7} is deployed."
+      else
+        echo "The dev deploy of $REPO failed." >&2
+        notify owner "$REPO needs you: the dev deploy of ${target:0:7} failed." \
+          "Read the log: journalctl --user -u 'minion-army-*'"
+      fi
     fi
   ) 6>"$project/dev.lock"
 }

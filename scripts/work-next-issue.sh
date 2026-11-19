@@ -74,12 +74,14 @@ done < <(gh pr list --repo "$REPO" --state open --base dev --author "$OWNER" --l
 if [[ -n "$pull_request" ]]; then
   gh pr edit "$pull_request" --repo "$REPO" --add-label needs-review >/dev/null
   echo "$REPO: issue $issue: $pull_request"
+  notify all "$REPO issue $issue: the worker opened a pull request." "$pull_request"
   remove_worktree "$worktree"
 else
   gh issue edit "$issue" --repo "$REPO" --add-label needs-input >/dev/null
   gh issue comment "$issue" --repo "$REPO" \
     --body "**Worker:** I stopped without a pull request (exit code $status). Answer in a comment or in the issue body. Then remove \`needs-input\` and add \`$LABEL\`." >/dev/null
   echo "$REPO: issue $issue: no pull request. The worktree stays at $worktree." >&2
+  notify owner "$REPO issue $issue needs you: the worker stopped without a pull request. It may have asked a question." "$(issue_link "$issue")"
   exit 1
 fi
 exit

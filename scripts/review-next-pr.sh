@@ -32,6 +32,7 @@ hand_to_owner() { # message
   set_pr_label "$number" needs-owner needs-review
   gh pr comment "$number" --repo "$REPO" --body "Automatic review stopped: $1" >/dev/null
   echo "$REPO: pull request $number: for the owner. $1"
+  notify owner "$REPO pull request $number needs you: $1" "$(pr_link "$number")"
   exit 0
 }
 
@@ -112,20 +113,24 @@ case "$verdict" in
       set_pr_label "$number" needs-owner needs-review
       gh pr comment "$number" --repo "$REPO" --body "The review approved $head. Only the owner merges it, because $(IFS=';'; echo "${gates[*]}")" >/dev/null
       echo "$REPO: pull request $number: approved, for the owner to merge."
+      notify owner "$REPO pull request $number needs you: the review approved it, and only you merge it, because $(IFS=';'; echo "${gates[*]}")" "$(pr_link "$number")"
       exit 0
     fi
     gh pr merge "$number" --repo "$REPO" --merge --match-head-commit "$head"
     gh pr edit "$number" --repo "$REPO" --remove-label needs-review >/dev/null
     echo "$REPO: pull request $number: merged into dev."
+    notify all "$REPO pull request $number: merged into dev." "$(pr_link "$number")"
     if load_project "$REPO"; then deploy_dev; fi
     ;;
   "VERDICT: CHANGES")
     set_pr_label "$number" changes-requested needs-review
     echo "$REPO: pull request $number: changes requested."
+    notify all "$REPO pull request $number: the review asked for changes." "$(pr_link "$number")"
     ;;
   "VERDICT: OWNER")
     set_pr_label "$number" needs-owner needs-review
     echo "$REPO: pull request $number: for the owner."
+    notify owner "$REPO pull request $number needs you: the review asks a person to decide." "$(pr_link "$number")"
     ;;
   *)
     hand_to_owner "the review ended without a clear verdict."

@@ -8,6 +8,11 @@ ACCOUNT=owner
 # More repositories, in addition to the ones of ACCOUNT. Each one needs .minion/config.sh on dev too.
 REPOS=()
 
+# Telegram messages: "owner" sends one each time the loop stops and waits for you, "all" also sends
+# the progress: pull requests opened, corrected and merged, and dev deployed. The bot token and the chat
+# go in agent.env as TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID.
+NOTIFY=owner
+
 # The number of slots for the whole machine: WORKERS for new issues and corrections, REVIEWERS for reviews.
 WORKERS=2
 REVIEWERS=2

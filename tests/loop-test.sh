@@ -50,6 +50,11 @@ EOF
 echo "$*" >>"$FAKE/claude.log"
 if [[ -f "$FAKE/claude-action.sh" ]]; then source "$FAKE/claude-action.sh"; fi
 EOF
+  # Stands in for curl, which sends the Telegram messages. It logs the arguments and the config file.
+  cat >"$case_dir/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+{ echo "$*"; while [[ $# -gt 0 ]]; do [[ "$1" == -K ]] && cat "$2"; shift; done; } >>"$FAKE/curl.log"
+EOF
   # Stands in for systemd-run: it notes the unit and runs the slot at once, with the given variables.
   cat >"$case_dir/bin/fake-start" <<'EOF'
 #!/usr/bin/env bash
@@ -434,6 +439,41 @@ run review-next-pr.sh
 check "a failed pre-review hook still gets a review" claude_ran "/minion:review-pr"
 check "an approval after a failed pre-review hook is not merged" not_logged "pr merge"
 check "an approval after a failed pre-review hook gets needs-owner" logged "--add-label needs-owner"
+
+# With a Telegram bot, the owner gets a message each time the loop stops and waits for them.
+notified() { grep -qF -- "$1" "$case_dir/curl.log" 2>/dev/null; }
+not_notified() { ! notified "$1"; }
+telegram() { TELEGRAM_BOT_TOKEN=made-up-token TELEGRAM_CHAT_ID=42 run "$@"; }
+
+new_case notify-needs-input
+work_rules 105
+echo "exit 1" >"$case_dir/claude-action.sh"
+telegram work-next-issue.sh
+check "a question of the worker notifies the owner" notified "text=$REPO issue 105 needs you"
+check "the message links the issue" notified "https://github.com/$REPO/issues/105"
+check "the message goes to the chat of the owner" notified "chat_id=42"
+check "the token stays off the command line" grep -q 'url = ".*made-up-token' "$case_dir/curl.log"
+check "the token is not an argument" not_notified "made-up-token/sendMessage --"
+
+new_case notify-gate
+review_rules "$sha" .minion/config.sh
+approve
+telegram review-next-pr.sh
+check "an approval that the owner merges notifies the owner" notified "text=$REPO pull request 116 needs you"
+
+new_case notify-no-bot
+work_rules 105
+echo "exit 1" >"$case_dir/claude-action.sh"
+run work-next-issue.sh
+check "without a bot, nothing is sent" test ! -e "$case_dir/curl.log"
+
+new_case notify-merge
+review_rules "$sha"
+approve
+telegram review-next-pr.sh
+check "a merge does not notify by default" test ! -e "$case_dir/curl.log"
+NOTIFY=all telegram review-next-pr.sh
+check "with NOTIFY=all, a merge notifies the owner" notified "merged into dev"
 
 # promote.sh does the next step of a release each time the owner runs it. The release branch is main.
 promote_case() { # name, version on main, then commits for dev as "subject|version" pairs

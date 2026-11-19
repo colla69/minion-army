@@ -249,6 +249,12 @@ Done when: a release of `makeMyTaxes` and of one other project runs through the 
 
 Done when: an agent run cannot read or write outside its worktree.
 
+### Telegram messages — done on 2026-11-19
+
+`notify` in `scripts/lib.sh` sends a message through a Telegram bot each time the loop stops and
+waits for the owner. With `NOTIFY=all`, it also sends the progress. The token and the chat stay in
+`agent.env`, and the token goes to curl in a config file, never on a command line.
+
 ## 5. Open questions
 
 1. **Closing pull requests.** Today nothing closes a pull request without a merge. Not decided yet.
