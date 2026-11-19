@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Gives the oldest pull request of one project back to Claude when the review requested changes, or
-# when a comment of the owner has no answer yet. The second holds also for a pull request that waits
-# for the owner, because only the merge waits for the owner. With no such pull request, it stops before
-# any call to Claude.
+# when a comment of the owner has no answer yet. needs-owner changes nothing here, because it stops only
+# the merge. With no such pull request, it stops before any call to Claude.
 # Usage: MINION_REPO=owner/name scripts/fix-next-pr.sh
 { # Bash reads this block in full before it runs it, so a change to this file during a run cannot break the run.
 set -euo pipefail
@@ -18,7 +17,7 @@ lock_choice
 number=$(OWNER=$OWNER gh pr list --repo "$REPO" --state open --base dev --author "$OWNER" \
   --json number,isCrossRepository,labels,comments \
   --jq "$OWNER_COMMENT_WAITS"'[.[] | select(.isCrossRepository | not)
-    | select(([.labels[].name] | index("changes-requested") and (index("needs-owner") | not))
+    | select(([.labels[].name] | index("changes-requested"))
       or owner_comment_waits)]
     | sort_by(.number) | .[].number' |
   while read -r candidate; do is_claimed "pr $candidate" || { echo "$candidate"; break; }; done || true)
@@ -74,7 +73,7 @@ if [[ "$now" != "$head" || "$now_body" != "$body" ]]; then
   if [[ "$asked" == true && "$answered" == false ]]; then
     gh pr comment "$number" --repo "$REPO" --body "**Fixer:** I pushed $now for your comment." >/dev/null
   fi
-  mapfile -t old < <(present changes-requested needs-owner)
+  mapfile -t old < <(present changes-requested needs-input)
   set_pr_label "$number" needs-review "${old[@]}"
   remove_worktree "$worktree"
   echo "$REPO: pull request $number: corrected, and back in the review queue."
@@ -85,9 +84,9 @@ elif [[ "$asked" == true && "$answered" == true && "$labels" != *" changes-reque
   notify owner "$REPO pull request $number: the fix agent answered your comment." "$(pr_link "$number")"
 else
   mapfile -t old < <(present changes-requested)
-  set_pr_label "$number" needs-owner "${old[@]}"
+  set_pr_label "$number" needs-input "${old[@]}"
   gh pr comment "$number" --repo "$REPO" \
-    --body "The worker stopped without a correction or an answer (exit code $status)." >/dev/null
+    --body "The worker stopped without a correction or an answer (exit code $status). Answer in a comment, or remove \`needs-input\` and add \`changes-requested\`." >/dev/null
   echo "$REPO: pull request $number: no correction. The worktree stays at $worktree." >&2
   notify owner "$REPO pull request $number needs you: the fix agent stopped without a correction or an answer." "$(pr_link "$number")"
   exit 1

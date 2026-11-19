@@ -151,7 +151,7 @@ project. Two builds at the same time can crash the machine today, and more proje
 ### 3.8 Labels
 
 The labels stay as they are: `agent-ready`, `in-progress`, `needs-input`, `on-dev` on issues, and
-`needs-review`, `changes-requested`, `needs-owner` on pull requests. A command of the engine creates
+`needs-review`, `changes-requested`, `needs-owner`, `needs-input` on pull requests. A command of the engine creates
 them in a new project.
 
 ### 3.9 Commands
@@ -261,6 +261,13 @@ Only the merge waits for the owner. The fix agent takes each comment of the owne
 answer yet, on any open pull request, also one with `needs-owner`. It answers with a comment that
 starts with `**Fixer:**`. A change goes back to the review, and the review skips a pull request whose
 owner comment waits, so a merge cannot pass over it.
+
+### needs-owner is only a merge gate — done on 2026-11-19
+
+The scripts add `needs-owner` without removing other labels, and never remove it. Only the owner
+does. It stops only the merge: the branch update, the review and the fix agent run as usual. A real
+stop of the loop (the round limit, a review that asks a person or has no clear verdict, a fix agent
+that did nothing) sets `needs-input` on the pull request instead, so the loop does not retry.
 
 ## 5. Open questions
 

@@ -395,7 +395,8 @@ review_rules "$sha"
 echo "echo 'VERDICT: APPROVE 0000000000000000000000000000000000000000'" >"$case_dir/claude-action.sh"
 run review-next-pr.sh
 check "an approval of another commit does not merge" not_logged "pr merge"
-check "an approval of another commit goes to the owner" logged "--add-label needs-owner"
+check "an approval of another commit waits for the owner" logged "--add-label needs-input"
+check "an approval of another commit does not add needs-owner" not_logged "--add-label needs-owner"
 
 # A gate stops only the merge: the review still runs and posts its findings, and the owner merges.
 approve() { echo "echo 'VERDICT: APPROVE $sha'" >"$case_dir/claude-action.sh"; }
@@ -493,7 +494,7 @@ fix_rules needs-owner true
 fix_pushes
 run fix-next-pr.sh
 check "a change for the owner goes back to the review" logged "--add-label needs-review"
-check "a change for the owner removes needs-owner" logged "--remove-label needs-owner"
+check "a change for the owner keeps needs-owner" not_logged "--remove-label needs-owner"
 check "a change without an answer gets one from the script" logged "**Fixer:** I pushed"
 
 new_case fix-owner-nothing
@@ -501,6 +502,16 @@ fix_rules needs-owner true
 telegram fix-next-pr.sh
 check "a run with no answer and no change tells the owner" logged "The worker stopped"
 check "a run with no answer and no change notifies the owner" notified "needs you"
+check "a run with no answer and no change waits with needs-input" logged "--add-label needs-input"
+check "a run with no answer and no change keeps needs-owner" not_logged "--remove-label needs-owner"
+
+new_case fix-findings-with-owner-label
+fix_rules "changes-requested needs-owner" false
+fix_pushes
+run fix-next-pr.sh
+check "the fix agent takes requested changes also with needs-owner" claude_ran "/minion:fix-pr 116"
+check "the fix agent does not skip needs-owner" not_logged 'index("needs-owner")'
+check "a correction with needs-owner keeps it" not_logged "--remove-label needs-owner"
 
 new_case review-owner-label
 review_rules "$sha"
@@ -509,6 +520,21 @@ LABELS="needs-review needs-owner" run review-next-pr.sh
 check "a pull request with needs-owner still gets a review" claude_ran "/minion:review-pr 116 $sha"
 check "an approved pull request with needs-owner is not merged" not_logged "pr merge"
 check "the review does not skip needs-owner" not_logged "-label:needs-owner"
+removes_only_needs_review() { ! grep -o -- "--remove-label [a-z-]*" "$case_dir/gh.log" | grep -qv "needs-review$"; }
+check "a gated approval removes no label but needs-review" removes_only_needs_review
+
+new_case update-owner-label
+cat >"$case_dir/rules.sh" <<EOF
+respond() {
+  case "\$*" in
+    "pr list"*) printf '116\tissue-116\tMERGEABLE\tneeds-review,needs-owner\n' ;;
+    "api repos/$REPO/compare/"*) echo 2 ;;
+  esac
+}
+EOF
+run update-pr-branches.sh
+check "a branch with needs-owner still gets the new dev" logged "pr update-branch 116 --repo $REPO"
+check "the branch update does not skip needs-owner" not_logged "-label:needs-owner"
 
 new_case review-skips-owner-comment
 review_rules "$sha"

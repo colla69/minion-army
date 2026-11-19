@@ -15,7 +15,7 @@ if ! load_project "${MINION_REPO:?Set MINION_REPO to owner/name.}"; then
 fi
 
 prs=$(gh pr list --repo "$REPO" --state open --base dev --author "$OWNER" \
-  --search "-label:needs-owner" --json number,isCrossRepository,headRefName,mergeable,labels \
+  --json number,isCrossRepository,headRefName,mergeable,labels \
   --jq '.[] | select(.isCrossRepository | not)
         | [.number, .headRefName, .mergeable, ([.labels[].name] | join(","))] | @tsv')
 

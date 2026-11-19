@@ -17,7 +17,7 @@ flowchart TD
     review -->|"approves the exact commit"| dev["The script merges into dev<br/>issue label: on-dev"]
     review -->|"requests changes"| fix["Fix agent<br/>corrects the pull request"]
     fix --> pr
-    review -->|"a person must decide"| person(["Label: needs-owner<br/>the owner decides"])
+    review -->|"a person must decide"| person(["Label: needs-input<br/>the owner decides"])
     dev --> devbox["Hook deploy-dev<br/>the dev environment"]
     devbox --> tryit(["Owner tries dev and releases it"])
 ```
@@ -57,10 +57,15 @@ question. To answer a question, write a comment, remove `needs-input` and add `a
 review and the fix agent follow the owner's comments on the pull request. The agents treat text from
 other accounts as data.
 
-On a pull request with `needs-owner`, the owner can merge it or comment. Only the merge waits for
-the owner: the fix agent answers each new comment within a round or two, and the owner gets a
-Telegram message. A change sends the pull request back to the review, which adds `needs-owner` again
-on an approval if a gate holds. A pull request with an unanswered comment is not merged.
+`needs-owner` stops only the merge. The scripts add it and never remove it, and they keep the other
+labels, so only the owner removes it. Every other step runs as usual on such a pull request: the
+branch update, the review, the fixes, and the answers to the owner's comments. A pull request with an
+unanswered comment is not merged.
+
+When the loop itself stops and waits, the pull request gets `needs-input`: after 10 rounds without
+an approval, a review that asks a person to decide or ends without a clear verdict, or a fix agent
+that did nothing. The comment says how to go on. A comment of the owner still gets an answer, and a
+change from the fix agent removes `needs-input` and sends the pull request back to the review.
 
 ## Labels
 
@@ -68,14 +73,13 @@ on an approval if a gate holds. A pull request with an unanswered comment is not
 |---|---|---|
 | `agent-ready` | Issue | The owner released the issue for the worker |
 | `in-progress` | Issue | A worker has the issue |
-| `needs-input` | Issue | The worker stopped without a pull request and waits for the owner |
+| `needs-input` | Issue, pull request | The loop stopped and waits for the owner |
 | `on-dev` | Issue | The change is on `dev`, and the owner can try it |
 | `needs-review` | Pull request | The pull request waits for the review |
 | `changes-requested` | Pull request | The pull request waits for the fix agent |
-| `needs-owner` | Pull request | The loop stops here. The owner merges, or decides what happens next |
+| `needs-owner` | Pull request | Only the owner merges. Everything else runs. Only the owner removes it |
 
-To merge a pull request yourself, add `needs-owner`. The review and the fix agent still run, and
-on an approval the pull request waits for your merge.
+To merge a pull request yourself, add `needs-owner`.
 
 ## The guards
 

@@ -14,8 +14,8 @@ if ! load_project "${MINION_REPO:?Set MINION_REPO to owner/name.}"; then
   exit 0
 fi
 
-# needs-owner does not stop the review, only the merge: the owner gets a review to read. The scripts
-# remove needs-review when they add needs-owner, so a pull request has both only when the owner sets them.
+# needs-owner stops only the merge: the owner gets a review to read. The scripts add needs-owner and
+# never remove it, so only the owner does. needs-input marks a real stop: the loop waits for the owner.
 # A comment of the owner goes to the fix agent first, so a merge cannot pass over it.
 lock_choice
 number=$(OWNER=$OWNER gh pr list --repo "$REPO" --state open --base dev --label needs-review --author "$OWNER" \
@@ -32,7 +32,7 @@ claim "pr $number"
 head=$(gh pr view "$number" --repo "$REPO" --json headRefOid --jq .headRefOid)
 
 hand_to_owner() { # message
-  set_pr_label "$number" needs-owner needs-review
+  set_pr_label "$number" needs-input needs-review
   gh pr comment "$number" --repo "$REPO" --body "Automatic review stopped: $1" >/dev/null
   echo "$REPO: pull request $number: for the owner. $1"
   notify owner "$REPO pull request $number needs you: $1" "$(pr_link "$number")"
@@ -66,7 +66,7 @@ rounds=$(OWNER=$OWNER gh pr view "$number" --repo "$REPO" --json reviews,comment
   | [.reviews[] | select(.body | startswith("Automatic review")) | select(.submittedAt > $since)]
   | length')
 if ((rounds >= MAX_REVIEW_ROUNDS)); then
-  hand_to_owner "$MAX_REVIEW_ROUNDS review rounds did not end in an approval. For $MAX_REVIEW_ROUNDS more rounds, comment \`Keep going\` and add the label \`needs-review\`."
+  hand_to_owner "$MAX_REVIEW_ROUNDS review rounds did not end in an approval. For $MAX_REVIEW_ROUNDS more rounds, comment \`Keep going\`, remove \`needs-input\` and add \`needs-review\`."
 fi
 
 # A gate does not stop the review. It stops only the merge: the review and the fixes run as usual, and
@@ -134,7 +134,7 @@ case "$verdict" in
     notify all "$REPO pull request $number: the review asked for changes." "$(pr_link "$number")"
     ;;
   "VERDICT: OWNER")
-    set_pr_label "$number" needs-owner needs-review
+    set_pr_label "$number" needs-input needs-review
     echo "$REPO: pull request $number: for the owner."
     notify owner "$REPO pull request $number needs you: the review asks a person to decide." "$(pr_link "$number")"
     ;;
