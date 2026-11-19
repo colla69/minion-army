@@ -229,7 +229,7 @@ machine.
 2. Dropped: `minion deploy-live`. The live deploy of makeMyTaxes must run in the checkout that holds
    the live data, not in the engine's clone. Each project keeps its own live deploy, and the owner
    starts it.
-3. Open: makeMyTaxes gets the three hooks, and its `promote` skill goes.
+3. In review: makeMyTaxes #178 adds the three hooks and removes its `promote` skill.
 4. Done, found on the way: Claude Code loads project plugins only in the folder where they were
    installed. The engine now passes the plugins that a project enables on `dev` with
    `--plugin-dir`, so the agents in its worktrees get the project's standards and the
