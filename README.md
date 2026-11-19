@@ -74,8 +74,8 @@ on an approval if a gate holds. A pull request with an unanswered comment is not
 | `changes-requested` | Pull request | The pull request waits for the fix agent |
 | `needs-owner` | Pull request | The loop stops here. The owner merges, or decides what happens next |
 
-To keep the review away from a pull request, add `needs-owner` before the review starts. A comment
-of the owner still starts the fix agent.
+To merge a pull request yourself, add `needs-owner`. The review and the fix agent still run, and
+on an approval the pull request waits for your merge.
 
 ## The guards
 

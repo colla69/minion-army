@@ -14,11 +14,12 @@ if ! load_project "${MINION_REPO:?Set MINION_REPO to owner/name.}"; then
   exit 0
 fi
 
-# The worker script adds needs-review to each new pull request, so needs-owner must also stop the review.
+# needs-owner does not stop the review, only the merge: the owner gets a review to read. The scripts
+# remove needs-review when they add needs-owner, so a pull request has both only when the owner sets them.
 # A comment of the owner goes to the fix agent first, so a merge cannot pass over it.
 lock_choice
 number=$(OWNER=$OWNER gh pr list --repo "$REPO" --state open --base dev --label needs-review --author "$OWNER" \
-  --search "-label:needs-owner" --json number,isCrossRepository,comments \
+  --json number,isCrossRepository,comments \
   --jq "$OWNER_COMMENT_WAITS"'[.[] | select(.isCrossRepository | not) | select(owner_comment_waits | not)]
     | sort_by(.number) | .[].number' |
   while read -r candidate; do is_claimed "pr $candidate" || { echo "$candidate"; break; }; done || true)
@@ -71,6 +72,9 @@ fi
 # A gate does not stop the review. It stops only the merge: the review and the fixes run as usual, and
 # on an approval the owner merges.
 gates=()
+if [[ " $(gh pr view "$number" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")') " == *" needs-owner "* ]]; then
+  gates+=("the owner added needs-owner.")
+fi
 guards=(-e "$ENGINE_OWNER_ONLY")
 if [[ -n "$OWNER_ONLY_PATHS" ]]; then guards+=(-e "$OWNER_ONLY_PATHS"); fi
 changed=$(gh pr diff "$number" --repo "$REPO" --name-only | grep -E "${guards[@]}" || true)

@@ -375,6 +375,7 @@ respond() {
     "pr view 116 --repo $REPO --json headRefOid"*) echo $1 ;;
     "pr view 116 --repo $REPO --json mergeable"*) echo MERGEABLE ;;
     "pr view 116 --repo $REPO --json reviews,comments"*) echo 0 ;;
+    "pr view 116 --repo $REPO --json labels"*) echo "\${LABELS:-needs-review}" ;;
     "pr checks"*) echo pass ;;
     "pr diff"*) echo ${2:-src/example.sh} ;;
   esac
@@ -500,6 +501,14 @@ fix_rules needs-owner true
 telegram fix-next-pr.sh
 check "a run with no answer and no change tells the owner" logged "The worker stopped"
 check "a run with no answer and no change notifies the owner" notified "needs you"
+
+new_case review-owner-label
+review_rules "$sha"
+approve
+LABELS="needs-review needs-owner" run review-next-pr.sh
+check "a pull request with needs-owner still gets a review" claude_ran "/minion:review-pr 116 $sha"
+check "an approved pull request with needs-owner is not merged" not_logged "pr merge"
+check "the review does not skip needs-owner" not_logged "-label:needs-owner"
 
 new_case review-skips-owner-comment
 review_rules "$sha"
