@@ -485,6 +485,7 @@ fix_answers
 telegram fix-next-pr.sh
 check "a comment of the owner on a pull request for the owner starts the fix agent" claude_ran "/minion:fix-pr 116"
 check "the fix agent may answer on the pull request" claude_ran "Bash(gh pr comment 116:*)"
+check "an owner review counts as a comment" logged "number,isCrossRepository,labels,comments,reviews"
 check "an answer alone keeps needs-owner" not_logged "--remove-label needs-owner"
 check "an answer alone does not go back to the review" not_logged "--add-label needs-review"
 check "an answer notifies the owner" notified "text=$REPO pull request 116: the fix agent answered your comment"

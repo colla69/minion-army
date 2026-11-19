@@ -19,7 +19,7 @@ fi
 # A comment of the owner goes to the fix agent first, so a merge cannot pass over it.
 lock_choice
 number=$(OWNER=$OWNER gh pr list --repo "$REPO" --state open --base dev --label needs-review --author "$OWNER" \
-  --json number,isCrossRepository,comments \
+  --json number,isCrossRepository,comments,reviews \
   --jq "$OWNER_COMMENT_WAITS"'[.[] | select(.isCrossRepository | not) | select(owner_comment_waits | not)]
     | sort_by(.number) | .[].number' |
   while read -r candidate; do is_claimed "pr $candidate" || { echo "$candidate"; break; }; done || true)

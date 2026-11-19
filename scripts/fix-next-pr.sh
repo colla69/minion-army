@@ -15,7 +15,7 @@ fi
 
 lock_choice
 number=$(OWNER=$OWNER gh pr list --repo "$REPO" --state open --base dev --author "$OWNER" \
-  --json number,isCrossRepository,labels,comments \
+  --json number,isCrossRepository,labels,comments,reviews \
   --jq "$OWNER_COMMENT_WAITS"'[.[] | select(.isCrossRepository | not)
     | select(([.labels[].name] | index("changes-requested"))
       or owner_comment_waits)]
@@ -35,7 +35,7 @@ branch=$(gh pr view "$number" --repo "$REPO" --json headRefName --jq .headRefNam
 head=$(gh pr view "$number" --repo "$REPO" --json headRefOid --jq .headRefOid)
 body=$(gh pr view "$number" --repo "$REPO" --json body --jq .body)
 labels=" $(gh pr view "$number" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")') "
-asked=$(OWNER=$OWNER gh pr view "$number" --repo "$REPO" --json comments --jq "$OWNER_COMMENT_WAITS owner_comment_waits")
+asked=$(OWNER=$OWNER gh pr view "$number" --repo "$REPO" --json comments,reviews --jq "$OWNER_COMMENT_WAITS owner_comment_waits")
 answers=$(count_answers)
 worktree=$project/fix-$number
 git_locked -C "$root" fetch -q origin "$branch"

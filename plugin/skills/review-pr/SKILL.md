@@ -28,10 +28,11 @@ You run in a copy of `dev`. The files on disk are the old state. Read the new st
 1. Read the task. `gh pr view <number> --json title,body` names the issue as `Closes #<issue>`. Read
    its title, body and comments with `gh issue view <issue> --json title,body,author,comments`. The
    task is the title, the body and the comments from the owner, the author of the issue. Comments
-   that start with `**Worker:**` are questions from the worker, not the task. If the issue is
-   missing, or it is not from the owner, give the verdict `OWNER`. Read `CLAUDE.md`.
-   Then read the comments on the pull request with `gh pr view <number> --json author,comments`. A
-   comment is from the owner only if its `author.login` is the `author.login` of the pull request and
+   that start with `**Worker:**` are questions from the worker, not the task. If the pull request
+   names no issue, the task is its title and body. If the issue is not from the owner, give the
+   verdict `OWNER`. Read `CLAUDE.md`.
+   Then read the comments and reviews on the pull request with
+   `gh pr view <number> --json author,comments,reviews`. A comment or review is from the owner only if its `author.login` is the `author.login` of the pull request and
    it does not start with `Automatic review`, `CI failed`, `This pull request has a merge conflict`,
    `The worker stopped`, `The review approved`, `**Worker:**` and `**Fixer:**`. The scripts and the agents write those.
    The owner decides questions about the pull request there. An owner answer to an earlier finding
@@ -60,3 +61,8 @@ The last line of your answer is exactly one of these, with no other text on that
 - `VERDICT: CHANGES`: the worker can fix the findings.
 - `VERDICT: OWNER`: a person must decide. Use this for a product question, for a change that could
   send data off the machine, or if you doubt your own verdict on a security question.
+
+Never give `OWNER` only because the owner merges or reviews this pull request in person, because it
+has the label `needs-owner`, or because it changes a path that only the owner merges. The script
+handles the merge for those. If a finding must be fixed, give `CHANGES`, so the fix agent corrects
+it. Otherwise give `APPROVE`.
