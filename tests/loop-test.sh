@@ -25,6 +25,7 @@ logged() { grep -qF -- "$1" "$case_dir/gh.log"; }
 not_logged() { ! grep -qF -- "$1" "$case_dir/gh.log" 2>/dev/null; }
 claude_ran() { grep -qF -- "$1" "$case_dir/claude.log" 2>/dev/null; }
 claude_never_ran() { [[ ! -s "$case_dir/claude.log" ]]; }
+not_claude_ran() { ! claude_ran "$1"; }
 
 # Creates a copy of the engine, the fakes, and a project whose dev branch holds a .minion folder.
 # Without "bare", the project gets a config and a deploy-dev hook. With "bare", it has no .minion folder.
@@ -256,6 +257,36 @@ check "the worker gets the tools of the project" claude_ran "Bash(make test)"
 check "the worker gets the rules of the project" claude_ran "MADE-UP-RULE: say hello."
 check "the hook setup-worktree runs in the worktree" grep -q "/issue-104$" "$case_dir/setup.log"
 
+# Claude Code loads project plugins only in the folder where they were installed, never in a worktree
+# of the engine. So the engine hands each plugin that the project enables to the agent itself.
+new_case project-plugins
+mkdir -p "$seed/.claude" "$case_dir/plugins/standard" "$case_dir/plugins/everywhere"
+cat >"$seed/.claude/settings.json" <<'EOF'
+{
+  "enabledPlugins": {
+    "standard@made-up": true,
+    "everywhere@made-up": true,
+    "switched-off@made-up": false,
+    "not-installed@made-up": true
+  }
+}
+EOF
+cat >"$case_dir/installed.json" <<EOF
+{"version": 2, "plugins": {
+  "standard@made-up": [{"scope": "project", "projectPath": "/somewhere", "installPath": "$case_dir/plugins/standard", "lastUpdated": "2026-11-01T00:00:00Z"}],
+  "everywhere@made-up": [{"scope": "user", "installPath": "$case_dir/plugins/everywhere", "lastUpdated": "2026-11-01T00:00:00Z"}],
+  "switched-off@made-up": [{"scope": "project", "projectPath": "/somewhere", "installPath": "$case_dir/plugins/standard", "lastUpdated": "2026-11-01T00:00:00Z"}]
+}}
+EOF
+commit_seed "made-up plugins"
+push_seed
+echo "$sha" >"$project/dev-deployed"
+work_rules 104 'issue-104\thttps://example.org/pull/116\n'
+MINION_INSTALLED_PLUGINS=$case_dir/installed.json run work-next-issue.sh
+check "the worker gets a plugin that the project enables" claude_ran "--plugin-dir $case_dir/plugins/standard"
+check "the worker does not get a plugin at user scope twice" not_claude_ran "$case_dir/plugins/everywhere"
+check "a missing plugin does not stop the worker" claude_ran "/minion:work-issue 104"
+
 # The worker names its branch issue-104-annexes. The script still finds the pull request.
 new_case branch-suffix
 work_rules 104 'issue-10-old\thttps://example.org/pull/10\nissue-104-annexes\thttps://example.org/pull/116\n'
@@ -386,6 +417,65 @@ review_rules "$sha"
 run review-next-pr.sh
 check "a failed pre-review hook starts no review" claude_never_ran
 check "a failed pre-review hook gets needs-owner" logged "--add-label needs-owner"
+
+# promote.sh does the next step of a release each time the owner runs it. The release branch is main.
+promote_case() { # name, version on main, then commits for dev as "subject|version" pairs
+  new_case "$1"
+  echo "$2" >"$seed/VERSION"
+  commit_seed "chore: version $2"
+  git -C "$seed" push -q origin dev:main
+  shift 2
+  local pair
+  for pair in "$@"; do
+    echo "${pair#*|}" >"$seed/VERSION"
+    commit_seed "${pair%|*}"
+  done
+  push_seed
+  cat >"$case_dir/rules.sh" <<'EOF'
+respond() {
+  case "$*" in
+    "repo view"*) echo main ;;
+    "issue list"*"--state open"*) echo 7 ;;
+    "issue list"*"--state closed"*) echo 5 ;;
+  esac
+}
+EOF
+}
+origin_tags() { git -C "$origin" tag; }
+origin_file() { git -C "$origin" show "$1:VERSION" 2>/dev/null; }
+
+promote_case promote-version 1.0.0 "feat: made-up feature|1.0.0" "fix: made-up fix|1.0.0"
+git -C "$origin" tag v1.0.0 main
+run promote.sh "$REPO"
+check "promote bumps the minor version for a feat" test "$(origin_file release/1.1.0)" = 1.1.0
+check "promote opens the version pull request into dev" logged "pr create --repo $REPO --base dev --head release/1.1.0"
+
+promote_case promote-major 1.4.2 "feat!: made-up break|1.4.2"
+git -C "$origin" tag v1.4.2 main
+run promote.sh "$REPO"
+check "promote bumps the major version for a breaking change" test "$(origin_file release/2.0.0)" = 2.0.0
+
+promote_case promote-first 0.1.0-SNAPSHOT "fix: made-up fix|0.1.0-SNAPSHOT"
+run promote.sh "$REPO"
+check "promote makes the first release from a snapshot" test "$(origin_file release/0.1.0)" = 0.1.0
+
+promote_case promote-main 1.0.0 "feat: made-up feature|1.0.0" "chore(release): 1.1.0|1.1.0"
+git -C "$origin" tag v1.0.0 main
+run promote.sh "$REPO"
+check "promote opens the pull request into main" logged "pr create --repo $REPO --base main --head dev --title release: 1.1.0"
+check "the pull request into main closes the issues on dev" grep -q "Closes #7" "$case_dir/gh.log"
+check "the pull request into main lists the features" grep -q "made-up feature" "$case_dir/gh.log"
+
+promote_case promote-tag 1.1.0
+run promote.sh "$REPO"
+check "promote tags a release that has no tag" test "$(origin_tags)" = v1.1.0
+check "promote removes on-dev from the closed issues" logged "issue edit 5 --repo $REPO --remove-label on-dev"
+
+promote_case promote-nothing 1.0.0
+git -C "$origin" tag v1.0.0 main
+run promote.sh "$REPO"
+check "promote with nothing new opens no pull request" not_logged "pr create"
+check "promote with nothing new says so" grep -q "nothing new" "$case_dir/out.log"
 
 # The owner merges a pull request by hand. The next round deploys the new dev once.
 new_case owner-merge

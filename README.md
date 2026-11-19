@@ -34,8 +34,11 @@ flowchart TD
 5. **Merge.** On an approval of the exact commit that the review read, the script merges into `dev`.
    The issue gets the label `on-dev`, and the hook `deploy-dev` of the project updates the dev
    environment.
-6. **Release.** The owner tries `dev` and merges into the release branch. GitHub then closes the
-   issues.
+6. **Release.** The owner tries `dev` and runs `scripts/promote.sh owner/name` after each merge. Each
+   run does the next step: it opens a pull request into `dev` that sets the new version, then the
+   pull request from `dev` into the release branch, and after that merge it tags the release.
+   GitHub closes the issues with the merge into the release branch. The owner merges every pull
+   request and deploys the tag the way the project does it.
 
 A round runs every minute. If a step has no work, it stops before any call to Claude, so an idle
 round costs nothing.
@@ -76,7 +79,7 @@ To keep the agents away from a pull request, add `needs-owner` before the review
 
 ## Set up the machine
 
-You need `bash`, `git`, `flock`, systemd, and the [`claude`](https://claude.com/claude-code) and
+You need `bash`, `git`, `flock`, `python3`, systemd, and the [`claude`](https://claude.com/claude-code) and
 [`gh`](https://cli.github.com/) command line tools, each with a login.
 
 1. Copy `config.example` to `~/.config/minion-army/config`, and set `ACCOUNT` to your GitHub
@@ -88,7 +91,9 @@ You need `bash`, `git`, `flock`, systemd, and the [`claude`](https://claude.com/
    `systemctl --user disable --now minion-army-agent.timer`.
 
 The engine keeps its own clone of each project in `~/.cache/minion-army/projects/`. It never touches
-your own checkout.
+your own checkout. Claude Code loads a project's plugins only in the folder where you installed them,
+so the engine hands each plugin that the project enables on `dev` to its agents. Install the
+project's plugins once on the machine, in your own checkout.
 
 ## Add a project
 

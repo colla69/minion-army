@@ -11,7 +11,8 @@ its guards: the agents never merge, and a pull request can never change the loop
 
 - Bash, with `flock` for all locking. No `jq`: `gh --jq` reads GitHub, and the project config is Bash
 - `gh` for every call to GitHub
-- The `claude` CLI in print mode (`claude -p`) for each agent run, with `plugin/` as `--plugin-dir`
+- The `claude` CLI in print mode (`claude -p`) for each agent run, with `plugin/` and the project's
+  plugins as `--plugin-dir`. `python3` reads the plugin lists in `scripts/plugin-dirs.py`
 - A systemd user timer and `systemd-run` for the slots. Docker comes in a later phase
 
 ## Commands
@@ -23,6 +24,7 @@ its guards: the agents never merge, and a pull request can never change the loop
 | One script for one project | `MINION_REPO=owner/name scripts/work-next-issue.sh [issue]` |
 | Install the timer | `scripts/install-agent-timer.sh` |
 | Create the labels in a new project | `scripts/init-project.sh owner/name` |
+| Next step of a release (the owner runs it) | `scripts/promote.sh owner/name` |
 
 Run the loop test through the `marketplace-base:test-runner` agent, so that only the failures reach
 the session.

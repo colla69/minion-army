@@ -26,3 +26,6 @@ MAX_REVIEW_ROUNDS=10
 #   hooks/setup-worktree          Runs in each new worktree, for files that git ignores.
 #   hooks/pre-review              Runs in the review worktree. A failure sends the pull request to the owner.
 #   hooks/deploy-dev              Runs in the engine's clone once for each new commit on dev.
+#   hooks/version-get <ref>       Prints the version on a ref. Without it, promote.sh reads the file VERSION.
+#   hooks/version-set <version>   Writes the version in a worktree. Without it, promote.sh writes VERSION.
+#   hooks/release-notes <range>   Prints a section for the pull request into the release branch.

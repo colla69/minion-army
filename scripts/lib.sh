@@ -79,16 +79,22 @@ load_project() { # owner/name
 }
 
 # Runs a hook of the project from dev, if the project has it. A missing hook counts as a success.
-run_hook() { # name, working directory
-  local hook=$root/.minion/hooks/$1
-  [[ -x "$hook" ]] || return 0
-  (cd "$2" && MINION_REPO=$REPO "$hook")
+run_hook() { # name, working directory, arguments for the hook...
+  has_hook "$1" || return 0
+  (cd "$2" && MINION_REPO=$REPO "$root/.minion/hooks/$1" "${@:3}")
 }
+has_hook() { [[ -x "$root/.minion/hooks/$1" ]]; }
 
-# Sets agent_args: the skills of the engine, and the rules of the project for this kind of run.
-# The rules come from dev, so a pull request cannot change the rules of the agent that corrects it.
+# Sets agent_args: the skills of the engine, the plugins that the project enables, and the rules of
+# the project for this kind of run. The plugins and the rules come from dev, so a pull request cannot
+# change what the agent that corrects it loads.
 set_agent_args() { # work, review or fix
   agent_args=(--plugin-dir "$engine/plugin")
+  local folder
+  while read -r folder; do
+    agent_args+=(--plugin-dir "$folder")
+  done < <(python3 -I "$engine/scripts/plugin-dirs.py" "$root/.claude/settings.json" \
+    "${MINION_INSTALLED_PLUGINS:-$HOME/.claude/plugins/installed_plugins.json}")
   local rules=$root/.minion/$1.md
   if [[ -f "$rules" ]]; then
     agent_args+=(--append-system-prompt "$(cat "$rules")")

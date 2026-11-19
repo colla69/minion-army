@@ -221,11 +221,19 @@ To go back: revert the merge of #171, stop `minion-army-agent.timer` and start
 Done when: a second project takes part after the owner merges a config file, with no change on the
 machine.
 
-### Phase 4: promotion and deploy
+### Phase 4: promotion and deploy — engine done, makeMyTaxes open
 
-1. Make the `promote` skill generic, with `version-get` and `version-set`.
-2. Add `minion deploy-live`.
-3. The owner still merges into the release branch and still starts the live deploy.
+1. Done: `scripts/promote.sh owner/name` replaces the `promote` skill. Every step follows fixed
+   rules, so a script does it without Claude, and the loop test covers it. The hooks `version-get`,
+   `version-set` and `release-notes` adapt it to a project. Without them, it uses a `VERSION` file.
+2. Dropped: `minion deploy-live`. The live deploy of makeMyTaxes must run in the checkout that holds
+   the live data, not in the engine's clone. Each project keeps its own live deploy, and the owner
+   starts it.
+3. Open: makeMyTaxes gets the three hooks, and its `promote` skill goes.
+4. Done, found on the way: Claude Code loads project plugins only in the folder where they were
+   installed. The engine now passes the plugins that a project enables on `dev` with
+   `--plugin-dir`, so the agents in its worktrees get the project's standards and the
+   `marketplace-base:reviewer` agent.
 
 Done when: a release of `makeMyTaxes` and of one other project runs through the same steps.
 
