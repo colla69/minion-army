@@ -36,7 +36,10 @@ time when something is not clear.
    - `hooks/deploy-dev`: when a dev environment exists.
    Each hook is an executable Bash script that starts with `set -euo pipefail`. The hooks run on
    the machine of the loop, so they must not depend on paths or tools of this machine. Ask me what
-   that machine has.
+   that machine has. A systemd timer runs the hooks with no terminal, so a hook must never call
+   `sudo`, wait for input or install system packages. For example, write
+   `playwright install chromium`, never `playwright install --with-deps`. If the tests need a
+   system package, tell me to install it on the machine of the loop.
 5. List the plugins that this project enables in `.claude/settings.json`. The agents load them on
    the machine of the loop, so tell me to install them there, in a checkout of this project.
 6. Commit the `.minion/` folder on a branch with a Conventional Commits message, push it, and open a
