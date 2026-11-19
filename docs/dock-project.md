@@ -1,16 +1,14 @@
 # Prompt: dock a project onto minion-army
 
 Open Claude Code in the checkout of the new project, on any machine, and paste the prompt below.
-Replace `<engine>` first: either the path of a local minion-army checkout, or its GitHub repository as
-`owner/minion-army`.
 
 ---
 
 Dock this repository onto minion-army, the loop that takes my GitHub issues to merged pull requests.
-The engine is `<engine>`: a local folder, or a GitHub repository. Before you start, read its
-`README.md` (sections "Add a project" and "Labels"), `project.example/config.sh` and
-`scripts/init-project.sh`. For a repository, read each file with
-`gh api repos/<engine>/contents/<path> -H "Accept: application/vnd.github.raw"`.
+The engine is the GitHub repository `colla69/minion-army`. Before you start, read its `README.md`
+(sections "Add a project" and "Labels"), `project.example/config.sh` and `scripts/init-project.sh`.
+Read each file with
+`gh api repos/colla69/minion-army/contents/<path> -H "Accept: application/vnd.github.raw"`.
 The loop may run on another machine than this one.
 
 Work in this order. Stop and ask me before each step that changes GitHub, and ask one question at a
@@ -23,10 +21,9 @@ time when something is not clear.
      review waits forever.
    - The repository has a `CLAUDE.md` that names the build, test and lint commands. If not, say so,
      because the agents read it.
-2. Create the labels. With a local engine, run `<engine>/scripts/init-project.sh <owner>/<name>`.
-   Otherwise run the same `gh label create ... --force` command for each label that the script
-   lists, with its color and description.
-3. Write `.minion/config.sh` from `<engine>/project.example/config.sh`. Keep only the settings that
+2. Create the labels: run the `gh label create ... --force` command of `scripts/init-project.sh`
+   for each label that it lists, with its color and description.
+3. Write `.minion/config.sh` from `project.example/config.sh`. Keep only the settings that
    differ from the defaults, and fill them from this repository:
    - `WORKER_TOOLS`: the exact commands the worker needs to build and test, as narrow `Bash(...)`
      patterns. Never `Bash(*)`.
