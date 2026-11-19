@@ -21,6 +21,11 @@ time when something is not clear.
      review waits forever.
    - The repository has a `CLAUDE.md` that names the build, test and lint commands. If not, say so,
      because the agents read it.
+   - The tests can run in two worktrees at the same time, because the loop runs several agents at
+     once. Look for anything that two runs would share: a fixed port, a server that the tests reuse,
+     a database, or a file outside the worktree. If you find one, report it and propose a fix, such
+     as a port derived from the path of the checkout. A shared server is the worst case: the second
+     run tests the code of the other branch and passes without a warning.
 2. Create the labels: run the `gh label create ... --force` command of `scripts/init-project.sh`
    for each label that it lists, with its color and description.
 3. Write `.minion/config.sh` from `project.example/config.sh`. Keep only the settings that
@@ -34,12 +39,18 @@ time when something is not clear.
    - `hooks/setup-worktree`: when the tests need files that git ignores.
    - `hooks/pre-review`: a check the review agent cannot do, such as a secret scan.
    - `hooks/deploy-dev`: when a dev environment exists.
-   Each hook is an executable Bash script that starts with `set -euo pipefail`. The hooks run on
-   the machine of the loop, so they must not depend on paths or tools of this machine. Ask me what
-   that machine has. A systemd timer runs the hooks with no terminal, so a hook must never call
-   `sudo`, wait for input or install system packages. For example, write
-   `playwright install chromium`, never `playwright install --with-deps`. If the tests need a
-   system package, tell me to install it on the machine of the loop.
+   Each hook must follow these rules:
+   - It is an executable Bash script that starts with `set -euo pipefail`.
+   - It runs on the machine of the loop, which may not be this one. It must not use a path or a tool
+     of this machine. Ask me what the machine of the loop has.
+   - A systemd timer starts it with no terminal and nobody watching. It must not call `sudo`, wait
+     for input or install system packages. For example, write `playwright install chromium`, not
+     `playwright install --with-deps chromium`. If the tests need a system package, tell me to
+     install it on the machine of the loop.
+   - It runs once for every new worktree, possibly in two worktrees at the same time. It must work
+     in a fresh worktree and must not change anything outside it, except a shared download cache.
+   Before you propose a hook, run each of its commands here as they would run unattended, and
+   report any command that asks for a password or for input.
 5. List the plugins that this project enables in `.claude/settings.json`. The agents load them on
    the machine of the loop, so tell me to install them there, in a checkout of this project.
 6. Commit the `.minion/` folder on a branch with a Conventional Commits message, push it, and open a
