@@ -70,8 +70,9 @@ if ! released "$dev_version" || { released "$main_version" && ! higher "$dev_ver
   fi
   branch=release/$version
   worktree=$project/$branch
-  git_locked -C "$root" worktree remove --force "$worktree" 2>/dev/null || true
-  git_locked -C "$root" worktree add -q -B "$branch" "$worktree" origin/dev
+  # The hook setup-worktree adds what the commit hook of the project needs.
+  prepare_worktree "$worktree" origin/dev
+  git_locked -C "$worktree" switch -q -C "$branch"
   if has_hook version-set; then
     run_hook version-set "$worktree" "$version"
   else
