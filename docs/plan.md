@@ -118,7 +118,8 @@ test on 2026-11-18 showed that `--plugin-dir` loads skills in print mode.
 3. A worker starts only for an issue that the owner wrote and that has the label `agent-ready`.
 4. The agents cannot merge. The review gives a verdict as text, and the script merges only when the
    verdict names the exact commit that the review read.
-5. A pull request that changes an owner-only path goes to the owner.
+5. A pull request that changes an owner-only path, or fails the pre-review hook, still gets a review
+   and fixes. Only the merge waits for the owner (since 2026-11-19).
 6. Each agent run has a tool list and a budget.
 
 One risk stays, as it does today: the worker runs the build of the project, and the build runs code

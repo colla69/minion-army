@@ -65,11 +65,14 @@ if ((rounds >= MAX_REVIEW_ROUNDS)); then
   hand_to_owner "$MAX_REVIEW_ROUNDS review rounds did not end in an approval. For $MAX_REVIEW_ROUNDS more rounds, comment \`Keep going\` and add the label \`needs-review\`."
 fi
 
+# A gate does not stop the review. It stops only the merge: the review and the fixes run as usual, and
+# on an approval the owner merges.
+gates=()
 guards=(-e "$ENGINE_OWNER_ONLY")
 if [[ -n "$OWNER_ONLY_PATHS" ]]; then guards+=(-e "$OWNER_ONLY_PATHS"); fi
 changed=$(gh pr diff "$number" --repo "$REPO" --name-only | grep -E "${guards[@]}" || true)
 if [[ -n "$changed" ]]; then
-  hand_to_owner "the owner reviews changes to these files: $(tr '\n' ' ' <<<"$changed")"
+  gates+=("it changes files that only the owner merges: $(tr '\n' ' ' <<<"$changed")")
 fi
 
 worktree=$project/review-$number
@@ -79,7 +82,7 @@ trap 'remove_worktree "$worktree"; release' EXIT
 
 # The project checks what the review agent cannot, such as secrets or personal data in the history.
 if ! run_hook pre-review "$worktree" >/dev/null 2>&1; then
-  hand_to_owner "the pre-review hook of the project found something. Run it locally."
+  gates+=("the pre-review hook of the project found something. Run it locally.")
 fi
 
 set_agent_args review
@@ -103,6 +106,12 @@ case "$verdict" in
     current=$(gh pr view "$number" --repo "$REPO" --json headRefOid,baseRefName --jq '.baseRefName + " " + .headRefOid')
     if [[ "$current" != "dev $head" ]]; then
       echo "$REPO: pull request $number changed during the review. It stays in the queue."
+      exit 0
+    fi
+    if ((${#gates[@]})); then
+      set_pr_label "$number" needs-owner needs-review
+      gh pr comment "$number" --repo "$REPO" --body "The review approved $head. Only the owner merges it, because $(IFS=';'; echo "${gates[*]}")" >/dev/null
+      echo "$REPO: pull request $number: approved, for the owner to merge."
       exit 0
     fi
     gh pr merge "$number" --repo "$REPO" --merge --match-head-commit "$head"

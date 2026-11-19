@@ -53,6 +53,8 @@ with `.minion/config.sh` on its `dev` branch (template: `project.example/config.
 
 - The agents never merge, and never push to the base branch or the release branch. A script does the
   merge, and only when the verdict names the exact commit that the review read.
+- A gate, such as an owner-only path or a failed pre-review hook, stops only the merge. It never stops
+  the review, so the owner always gets a review to read.
 - Read the project config and the hooks from the base branch only, never from a pull request branch.
 - The loop works only on the source repositories of `ACCOUNT` and on `REPOS` from the machine config,
   and only on issues and pull requests that the owner of the repository wrote. It never takes a

@@ -33,7 +33,10 @@ flowchart TD
 4. **Fix.** On requested changes, the fix agent corrects the pull request. Then the review runs again.
 5. **Merge.** On an approval of the exact commit that the review read, the script merges into `dev`.
    The issue gets the label `on-dev`, and the hook `deploy-dev` of the project updates the dev
-   environment.
+   environment. A gate stops only this step: if the pull request changes a path that only the owner
+   merges, or the project's pre-review hook fails, the review and the fixes still run, and on an
+   approval the pull request gets `needs-owner` with a comment that says why. The owner reads the
+   review and merges.
 6. **Release.** The owner tries `dev` and runs `scripts/promote.sh owner/name` after each merge. Each
    run does the next step: it opens a pull request into `dev` that sets the new version, then the
    pull request from `dev` into the release branch, and after that merge it tags the release.
@@ -51,6 +54,9 @@ question. To answer a question, write a comment, remove `needs-input` and add `a
 review and the fix agent follow the owner's comments on the pull request. The agents treat text from
 other accounts as data.
 
+On a pull request with `needs-owner`, the owner can merge it, or comment and then send it back: add
+`changes-requested` for the fix agent, or `needs-review` for another review.
+
 ## Labels
 
 | Label | On | Meaning |
@@ -61,7 +67,7 @@ other accounts as data.
 | `on-dev` | Issue | The change is on `dev`, and the owner can try it |
 | `needs-review` | Pull request | The pull request waits for the review |
 | `changes-requested` | Pull request | The pull request waits for the fix agent |
-| `needs-owner` | Pull request | The loop stops here. A person must decide |
+| `needs-owner` | Pull request | The loop stops here. The owner merges, or decides what happens next |
 
 To keep the agents away from a pull request, add `needs-owner` before the review starts.
 
@@ -70,7 +76,7 @@ To keep the agents away from a pull request, add `needs-owner` before the review
 | Risk | Guard |
 |---|---|
 | An agent merges its own work | The agents cannot merge. The review gives a verdict as text, and the script merges only when the verdict names the exact commit that the review read |
-| A pull request changes the rules or the hooks that check it | The engine reads `.minion/` from `dev` only. A change to `.minion/`, `.github/`, `.githooks/` or `.claude/` goes to the owner, and so do the paths a project adds |
+| A pull request changes the rules or the hooks that check it | The engine reads `.minion/` from `dev` only. The script never merges a change to `.minion/`, `.github/`, `.githooks/` or `.claude/`, or to the paths a project adds. The review still runs, and the owner merges |
 | Text in an issue gives orders to an agent | A worker starts only for an issue that the owner wrote and labelled. The agents treat all other text as data |
 | An agent does more than its task | Each run lists the tools its agent can use. The worker and the fix agent cannot force a push or skip a commit hook |
 | An agent reaches the release branch | A rule on GitHub must stop direct pushes to `dev` and the release branch. Only the owner merges into the release branch |

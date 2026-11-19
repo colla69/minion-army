@@ -391,11 +391,24 @@ run review-next-pr.sh
 check "an approval of another commit does not merge" not_logged "pr merge"
 check "an approval of another commit goes to the owner" logged "--add-label needs-owner"
 
+# A gate stops only the merge: the review still runs and posts its findings, and the owner merges.
+approve() { echo "echo 'VERDICT: APPROVE $sha'" >"$case_dir/claude-action.sh"; }
+
 new_case review-engine-guard
 review_rules "$sha" .minion/config.sh
+approve
 run review-next-pr.sh
-check "a change to .minion/ goes to the owner without a review" claude_never_ran
-check "a change to .minion/ gets needs-owner" logged "--add-label needs-owner"
+check "a change to .minion/ gets a review" claude_ran "/minion:review-pr 116 $sha"
+check "an approved change to .minion/ is not merged" not_logged "pr merge"
+check "an approved change to .minion/ gets needs-owner" logged "--add-label needs-owner"
+check "the owner learns why the merge waits" grep -q "Only the owner merges.*\.minion/config.sh" "$case_dir/gh.log"
+
+new_case review-guard-changes
+review_rules "$sha" .minion/config.sh
+echo "echo 'VERDICT: CHANGES'" >"$case_dir/claude-action.sh"
+run review-next-pr.sh
+check "a guarded change with findings goes to the fix agent" logged "--add-label changes-requested"
+check "a guarded change with findings does not wait for the owner" not_logged "--add-label needs-owner"
 
 new_case review-project-guard
 echo "OWNER_ONLY_PATHS='^pom\.xml\$'" >>"$seed/.minion/config.sh"
@@ -403,9 +416,11 @@ commit_seed "made-up guard"
 push_seed
 echo "$sha" >"$project/dev-deployed"
 review_rules "$sha" pom.xml
+approve
 run review-next-pr.sh
-check "a change to an owner-only path of the project goes to the owner" claude_never_ran
-check "a change to an owner-only path of the project gets needs-owner" logged "--add-label needs-owner"
+check "a change to an owner-only path of the project gets a review" claude_ran "/minion:review-pr"
+check "an approved change to an owner-only path of the project is not merged" not_logged "pr merge"
+check "an approved change to an owner-only path of the project gets needs-owner" logged "--add-label needs-owner"
 
 new_case review-pre-review-fails
 printf '#!/usr/bin/env bash\nexit 1\n' >"$seed/.minion/hooks/pre-review"
@@ -414,9 +429,11 @@ commit_seed "made-up check"
 push_seed
 echo "$sha" >"$project/dev-deployed"
 review_rules "$sha"
+approve
 run review-next-pr.sh
-check "a failed pre-review hook starts no review" claude_never_ran
-check "a failed pre-review hook gets needs-owner" logged "--add-label needs-owner"
+check "a failed pre-review hook still gets a review" claude_ran "/minion:review-pr"
+check "an approval after a failed pre-review hook is not merged" not_logged "pr merge"
+check "an approval after a failed pre-review hook gets needs-owner" logged "--add-label needs-owner"
 
 # promote.sh does the next step of a release each time the owner runs it. The release branch is main.
 promote_case() { # name, version on main, then commits for dev as "subject|version" pairs
