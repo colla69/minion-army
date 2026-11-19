@@ -148,6 +148,41 @@ check "a project without a config gets no housekeeping" not_logged "pr list"
 check "a project without a config gets no worker" claude_never_ran
 check "a project without a config gets no deploy" test ! -e "$case_dir/deploy.log"
 
+# With ACCOUNT, the loop finds the projects itself: each source repository with a config on dev.
+new_case discovery
+echo "ACCOUNT=colla69" >"$case_dir/machine.conf"
+cat >"$case_dir/rules.sh" <<'EOF'
+respond() {
+  case "$*" in
+    "repo list colla69"*) printf 'colla69/demo\ncolla69/other\n' ;;
+    "api repos/colla69/demo/contents/.minion/config.sh?ref=dev"*) return 0 ;;
+    "api repos/colla69/other/contents/.minion/config.sh?ref=dev"*) return 1 ;;
+  esac
+}
+EOF
+run agent-loop.sh
+check "discovery takes a repository with a config on dev" logged "pr list --repo $REPO"
+check "discovery leaves a repository without a config" not_logged "--repo colla69/other"
+: >"$case_dir/gh.log"
+run agent-loop.sh
+check "discovery uses its cache in the next round" not_logged "repo list"
+check "the cached project still takes part" logged "pr list --repo $REPO"
+
+# A failed listing keeps the last list, so a GitHub outage does not drop the projects for an hour.
+new_case discovery-fails
+echo "ACCOUNT=colla69" >"$case_dir/machine.conf"
+echo "colla69/demo" >"$(state)/discovered-colla69"
+touch -d "2 hours ago" "$(state)/discovered-colla69"
+echo 'respond() { case "$*" in "repo list"*) return 1 ;; esac; }' >"$case_dir/rules.sh"
+run agent-loop.sh
+check "a failed listing keeps the last list" logged "pr list --repo $REPO"
+
+# init-project.sh creates the labels of the loop in a project.
+new_case init
+run init-project.sh "$REPO"
+check "init creates the label agent-ready" logged "label create agent-ready --repo $REPO"
+check "init creates the label needs-owner" logged "label create needs-owner --repo $REPO"
+
 # A slot that still runs is not started again.
 new_case busy-slot
 hold_slot work-1

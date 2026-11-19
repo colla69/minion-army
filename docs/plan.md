@@ -210,12 +210,13 @@ To go back: revert the merge of #171, stop `minion-army-agent.timer` and start
 
 ### Phase 3: many projects
 
-1. Discovery: list the repositories of the account, keep the ones with `.minion/config.sh` on
-   `dev`, and cache the list for an hour. A round then costs one call for each project, not
-   one for each repository of the account.
-2. Clone a new project into the engine's folder by itself.
-3. Global slots and the build lock for the whole machine.
-4. `minion init` and `minion status`.
+1. Done: with `ACCOUNT` in the machine config, the engine lists the source repositories of the
+   account, keeps the ones with `.minion/config.sh` on `dev`, and caches the list for an hour. A
+   failed listing keeps the last list. On 2026-11-19 it checked 36 repositories in 18 seconds.
+2. Done: `load_project` clones a new project into the engine's folder by itself.
+3. Done: `scripts/init-project.sh owner/name` creates the labels.
+4. Open, only when needed: the oldest work over all projects first, a build lock for the whole
+   machine, and `minion status`. makeMyTaxes keeps its own build lock in `scripts/build.sh`.
 
 Done when: a second project takes part after the owner merges a config file, with no change on the
 machine.

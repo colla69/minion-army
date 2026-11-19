@@ -22,6 +22,7 @@ its guards: the agents never merge, and a pull request can never change the loop
 | One round by hand | `scripts/agent-loop.sh` |
 | One script for one project | `MINION_REPO=owner/name scripts/work-next-issue.sh [issue]` |
 | Install the timer | `scripts/install-agent-timer.sh` |
+| Create the labels in a new project | `scripts/init-project.sh owner/name` |
 
 Run the loop test through the `marketplace-base:test-runner` agent, so that only the failures reach
 the session.
@@ -51,8 +52,9 @@ with `.minion/config.sh` on its `dev` branch (template: `project.example/config.
 - The agents never merge, and never push to the base branch or the release branch. A script does the
   merge, and only when the verdict names the exact commit that the review read.
 - Read the project config and the hooks from the base branch only, never from a pull request branch.
-- The loop works only on the repositories in the machine config, and only on issues and pull
-  requests that the owner of the repository wrote. It never takes a pull request from a fork.
+- The loop works only on the source repositories of `ACCOUNT` and on `REPOS` from the machine config,
+  and only on issues and pull requests that the owner of the repository wrote. It never takes a
+  fork, or a pull request from a fork.
 - Nothing in this repository may name one project. A value that belongs to one project goes in that
   project's config file or hooks.
 - Promotion to the release branch and the live deploy stay behind the owner.

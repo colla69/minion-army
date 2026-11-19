@@ -79,7 +79,8 @@ To keep the agents away from a pull request, add `needs-owner` before the review
 You need `bash`, `git`, `flock`, systemd, and the [`claude`](https://claude.com/claude-code) and
 [`gh`](https://cli.github.com/) command line tools, each with a login.
 
-1. Copy `config.example` to `~/.config/minion-army/config`, and list the repositories in `REPOS`.
+1. Copy `config.example` to `~/.config/minion-army/config`, and set `ACCOUNT` to your GitHub
+   account.
 2. For unattended runs, put `CLAUDE_CODE_OAUTH_TOKEN` in `~/.config/minion-army/agent.env`, with
    mode 600. Keep this file outside every repository.
 3. Run `scripts/install-agent-timer.sh`. To read the logs, run
@@ -91,8 +92,10 @@ your own checkout.
 
 ## Add a project
 
-A project takes part when its `dev` branch holds `.minion/config.sh`. Copy
-`project.example/config.sh`, which lists every setting and every optional file:
+A repository of `ACCOUNT` takes part when its `dev` branch holds `.minion/config.sh`. The engine
+finds it within an hour, with no change on the machine. First run `scripts/init-project.sh
+owner/name` to create the labels. Then copy `project.example/config.sh`, which lists every setting
+and every optional file:
 
 - `config.sh`: the paths that only the owner reviews, and the commands of the agents.
 - `work.md`, `review.md`, `fix.md`: rules that the engine adds to that kind of agent run. Most
@@ -100,5 +103,5 @@ A project takes part when its `dev` branch holds `.minion/config.sh`. Copy
 - `hooks/setup-worktree`, `hooks/pre-review`, `hooks/deploy-dev`: scripts that prepare a worktree,
   check a pull request before the review, and deploy `dev`.
 
-The project also needs the labels above, a `dev` branch with a rule that requires CI, and CI that
-runs on pull requests.
+The project also needs a `dev` branch with a rule that requires CI, and CI that runs on pull
+requests. The review waits for the required checks, so without such a rule it waits forever.

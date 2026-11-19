@@ -20,11 +20,33 @@ load_machine_config() {
   REPOS=()
   WORKERS=2
   REVIEWERS=2
+  ACCOUNT=
   local config=${MINION_CONFIG:-$HOME/.config/minion-army/config}
   if [[ -f "$config" ]]; then
     # shellcheck source=/dev/null
     source "$config"
   fi
+  discover_repos
+}
+
+# Adds to REPOS each source repository of ACCOUNT that has .minion/config.sh on dev, so that a project
+# takes part once the owner merges its config. The list stays in a cache for an hour, so a round makes
+# no call for the repositories that do not take part. A failed listing keeps the last list.
+discover_repos() {
+  [[ -n "$ACCOUNT" ]] || return 0
+  local cache=$state/discovered-$ACCOUNT listed repo
+  if [[ -z "$(find "$cache" -mmin -60 2>/dev/null)" ]] &&
+    listed=$(gh repo list "$ACCOUNT" --source --no-archived --limit 1000 --json nameWithOwner \
+      --jq '.[].nameWithOwner'); then
+    for repo in $listed; do
+      if gh api "repos/$repo/contents/.minion/config.sh?ref=dev" --silent 2>/dev/null; then echo "$repo"; fi
+    done >"$cache.new"
+    mv "$cache.new" "$cache"
+  fi
+  [[ -f "$cache" ]] || return 0
+  while read -r repo; do
+    [[ -n "$repo" && " ${REPOS[*]} " != *" $repo "* ]] && REPOS+=("$repo")
+  done <"$cache"
 }
 
 # Sets up one project: its own clone at origin/dev, its folder for state, and its config.

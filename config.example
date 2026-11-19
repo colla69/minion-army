@@ -1,8 +1,12 @@
 # The settings of this machine. Copy this file to ~/.config/minion-army/config and change it there.
 # The engine sources it at the start of each round and each slot.
 
-# The projects that the loop works on. Each one needs .minion/config.sh on its dev branch.
-REPOS=(owner/project)
+# Each source repository of this account (no forks, no archived ones) with .minion/config.sh on its
+# dev branch takes part. The engine checks for new ones once an hour.
+ACCOUNT=owner
+
+# More repositories, in addition to the ones of ACCOUNT. Each one needs .minion/config.sh on dev too.
+REPOS=()
 
 # The number of slots for the whole machine: WORKERS for new issues and corrections, REVIEWERS for reviews.
 WORKERS=2
